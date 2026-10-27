@@ -28,6 +28,25 @@ uvicorn backend.app.main:app --reload
 - `GET /api/health` — keys present, spend today vs daily limit
 - `POST /api/transcribe` — `audio`: WAV (mono, 16-bit, 16/24 kHz) → transcript
 - `POST /api/evidence` — `photo` + `concept` (e.g. `pothole`) → SAM boxes/masks, `found`
+- `POST /api/complaints` — `text`, optional `area` and `photo` → the agent's decision and tool trace
+- `GET /api/complaints`, `GET /api/complaints/{id}` — stored complaints with supporter counts
+
+## The complaint agent
+
+`backend/app/agent.py` runs Muse Spark 1.3 in a tool-calling loop (Chat Completions):
+
+1. `search_similar_complaints(area, category, keywords)`: open complaints from the last 30 days at the same place
+2. `check_photo(concept)`: SAM 3.1 counts the reported problem in the citizen's photo
+3. `submit_decision(...)`: valid or rejected, category, urgency, duplicate link, Hindi formal letter, reply to the citizen
+
+The final decision is **verified in code**, not trusted. A duplicate must be an id the search
+actually returned. "Photo matches" must agree with SAM's counts. The letter must be real
+Devanagari Hindi. High urgency needs a stated reason. A failed check goes back to the model as the
+tool result, so it can correct itself (up to 8 turns), and every step is stored as a trace
+officers can read. The department comes from a fixed catalog keyed by category, so the model
+cannot route to a department that does not exist.
+
+`python scripts/agent_demo.py [photo.jpg]` runs it live on a new report, a duplicate and spam.
 
 Spend guard: every model call is priced and logged per IST day; calls stop with HTTP 429 once
 `AWAAZ_DAILY_BUDGET_USD` (default 3) is reached.
