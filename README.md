@@ -30,6 +30,11 @@ uvicorn backend.app.main:app --reload
 - `POST /api/evidence` — `photo` + `concept` (e.g. `pothole`) → SAM boxes/masks, `found`
 - `POST /api/complaints` — `text`, optional `area` and `photo` → the agent's decision and tool trace
 - `GET /api/complaints`, `GET /api/complaints/{id}` — stored complaints with supporter counts
+- `POST /api/voice-samples` — keeps a recording on this machine, scored for background noise and filed under `good/` or `noisy/` (`AWAAZ_SAMPLES_DIR`)
+
+Open http://localhost:8000/ for the citizen page: tap the mic, speak in Hindi/English, and the
+browser itself encodes 16 kHz mono WAV (`frontend/recorder.js`, no ffmpeg) for Voice Transcribe;
+the transcript lands in the complaint box, ready to send to the agent.
 
 ## The complaint agent
 

@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.staticfiles import StaticFiles
 
 from .agent import ComplaintAgent, Report
+from .audio import save_sample, voice_quality
 from .config import BudgetExceeded, settings
 from .meta_client import transcribe_wav
 from .store import Store
@@ -15,6 +19,7 @@ MAX_IMAGE_BYTES = 10 * 1024 * 1024
 
 MAX_TEXT_CHARS = 2000
 PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
+FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app = FastAPI(title="Awaaz", version="0.2.0")
 _store: Store | None = None
@@ -50,9 +55,28 @@ async def transcribe(audio: UploadFile = File(...)) -> dict:
     wav = await audio.read()
     if len(wav) > MAX_AUDIO_BYTES:
         raise HTTPException(413, "Audio must be under 32 MB.")
+    _check_wav(wav)
+    return transcribe_wav(wav)
+
+
+def _check_wav(wav: bytes) -> None:
     if wav[:4] != b"RIFF" or wav[8:12] != b"WAVE":
         raise HTTPException(400, "Send a WAV file (mono, 16-bit, 16 or 24 kHz).")
-    return transcribe_wav(wav)
+
+
+@app.post("/api/voice-samples")
+async def voice_sample(audio: UploadFile = File(...), transcript: str = Form("")) -> dict:
+    """Keep a recording on this machine, sorted into good/ or noisy/ by background noise."""
+    wav = await audio.read()
+    if len(wav) > MAX_AUDIO_BYTES:
+        raise HTTPException(413, "Audio must be under 32 MB.")
+    _check_wav(wav)
+    try:
+        quality = voice_quality(wav)
+    except (ValueError, EOFError) as exc:
+        raise HTTPException(400, str(exc) or "Unreadable WAV.") from exc
+    path = save_sample(wav, quality, settings.samples_dir, transcript.strip()[:2000])
+    return {**quality, "saved_as": f"{path.parent.name}/{path.name}"}
 
 
 @app.post("/api/evidence")
@@ -123,3 +147,8 @@ def get_complaint(complaint_id: int) -> dict:
         raise HTTPException(404, "No such complaint.")
     body["supporters"] = store.supporters(complaint_id)
     return body
+
+
+# Last, so the /api routes above win over the static files.
+if FRONTEND_DIR.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

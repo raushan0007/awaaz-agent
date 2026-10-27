@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Awaaz – अपनी शिकायत बोलिए</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23d9480f'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="brand">आवाज़ <span>Awaaz</span></div>
+    <p class="tag">सड़क, पानी, बिजली, सफ़ाई — अपनी समस्या बोलिए, हम सही विभाग तक पहुँचाएँगे।</p>
+  </header>
+
+  <main>
+    <section class="card mic-card">
+      <button id="mic" class="mic" aria-label="रिकॉर्डिंग शुरू करें">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+      </button>
+      <canvas id="meter" width="600" height="60" aria-hidden="true"></canvas>
+      <p id="micStatus" class="status">माइक दबाकर बोलिए। दोबारा दबाने पर रुकेगा।</p>
+      <label class="check"><input id="keepSample" type="checkbox" checked> रिकॉर्डिंग टेस्ट सैंपल के रूप में सेव करें (सिर्फ़ इसी कंप्यूटर पर)</label>
+      <div id="sampleInfo" class="sample" hidden></div>
+      <audio id="playback" controls hidden></audio>
+    </section>
+
+    <section class="card">
+      <label for="text">आपकी शिकायत</label>
+      <textarea id="text" rows="5" placeholder="जैसे: वार्ड 5 में गांधी चौक के पास सड़क पर बड़े गड्ढे हैं…"></textarea>
+      <label for="area">जगह (वार्ड / मोहल्ला / गाँव)</label>
+      <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 5, सुपौल">
+      <button id="send" class="send">शिकायत भेजें</button>
+      <p id="sendStatus" class="status"></p>
+    </section>
+
+    <section id="result" class="card result" hidden></section>
+  </main>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
