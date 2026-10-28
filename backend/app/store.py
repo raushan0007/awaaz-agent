@@ -23,10 +23,15 @@ CREATE TABLE IF NOT EXISTS complaints (
     urgency TEXT,
     duplicate_of INTEGER REFERENCES complaints(id),
     decision TEXT,
-    trace TEXT
+    trace TEXT,
+    photo TEXT,
+    evidence TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_open ON complaints(status, category, area_key);
 """
+# Columns added after the first release, so databases made earlier keep working.
+LATER_COLUMNS = {"photo": "TEXT", "evidence": "TEXT"}
+JSON_COLUMNS = ("decision", "photo", "evidence")
 
 # open: routed to a department; merged: a duplicate of an open complaint; rejected: failed
 # verification (spam, not civic); needs_review: the agent could not reach a valid decision.
@@ -39,6 +44,10 @@ def area_key(area: str) -> str:
     # Not `\w`: it misses Devanagari vowel signs, which would split "वार्ड" into letters.
     text = "".join(" " if unicodedata.category(ch)[0] in "PSZ" else ch for ch in area.lower())
     return " ".join(w for w in text.split() if w not in NUMBER_WORDS)
+
+
+def _dump(value: dict | None) -> str | None:
+    return json.dumps(value, ensure_ascii=False) if value is not None else None
 
 
 def _areas_match(a: str, b: str) -> bool:
@@ -55,21 +64,30 @@ class Store:
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
+        have = {r["name"] for r in self._db.execute("PRAGMA table_info(complaints)")}
+        for name, kind in LATER_COLUMNS.items():
+            if name not in have:
+                self._db.execute(f"ALTER TABLE complaints ADD COLUMN {name} {kind}")
 
     def add(self, *, text: str, area: str, has_photo: bool, status: str, category: str | None,
-            urgency: str | None, duplicate_of: int | None, decision: dict | None, trace: list) -> int:
+            urgency: str | None, duplicate_of: int | None, decision: dict | None, trace: list,
+            evidence: dict | None = None) -> int:
         with self._lock, self._db:
             cur = self._db.execute(
                 "INSERT INTO complaints (created_at, text, area, area_key, has_photo, status, category,"
-                " urgency, duplicate_of, decision, trace) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                " urgency, duplicate_of, decision, trace, evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     text, area, area_key(area), int(has_photo), status, category, urgency, duplicate_of,
-                    json.dumps(decision, ensure_ascii=False) if decision is not None else None,
-                    json.dumps(trace, ensure_ascii=False),
+                    _dump(decision), json.dumps(trace, ensure_ascii=False), _dump(evidence),
                 ),
             )
             return cur.lastrowid
+
+    def set_photo(self, complaint_id: int, photo: dict) -> None:
+        """photo = {"file", "width", "height"}; the file itself lives in the photos folder."""
+        with self._lock, self._db:
+            self._db.execute("UPDATE complaints SET photo = ? WHERE id = ?", (_dump(photo), complaint_id))
 
     def get(self, complaint_id: int) -> dict[str, Any] | None:
         row = self._db.execute("SELECT * FROM complaints WHERE id = ?", (complaint_id,)).fetchone()
@@ -105,6 +123,7 @@ class Store:
     def _row(self, row: sqlite3.Row) -> dict[str, Any]:
         d = dict(row)
         d["has_photo"] = bool(d["has_photo"])
-        d["decision"] = json.loads(d["decision"]) if d["decision"] else None
+        for column in JSON_COLUMNS:
+            d[column] = json.loads(d[column]) if d[column] else None
         d["trace"] = json.loads(d["trace"]) if d["trace"] else []
         return d

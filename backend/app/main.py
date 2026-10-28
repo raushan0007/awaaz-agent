@@ -5,12 +5,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .agent import ComplaintAgent, Report
 from .audio import save_sample, voice_quality
 from .config import BudgetExceeded, settings
 from .meta_client import transcribe_wav
+from .photos import PhotoError, clean_photo
 from .store import Store
 from .vision import segment_image
 
@@ -23,6 +25,10 @@ FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app = FastAPI(title="Awaaz", version="0.2.0")
 _store: Store | None = None
+
+
+def photos_dir() -> Path:
+    return settings.data_dir / "photos"
 
 
 def get_store() -> Store:
@@ -105,13 +111,19 @@ async def file_complaint(
     if len(area) > 80:
         raise HTTPException(400, "Area must be under 80 characters.")
     report = Report(text=text, area=area)
+    photo_info = None
     if photo is not None and photo.filename:
-        report.photo = await photo.read()
-        report.photo_mime = photo.content_type or "image/jpeg"
-        if len(report.photo) > MAX_IMAGE_BYTES:
+        raw = await photo.read()
+        if len(raw) > MAX_IMAGE_BYTES:
             raise HTTPException(413, "Photo must be under 10 MB.")
-        if report.photo_mime not in PHOTO_TYPES:
-            raise HTTPException(400, "Photo must be JPEG, PNG or WebP.")
+        mime = photo.content_type or "image/jpeg"
+        try:
+            # Metadata (GPS, phone model, time) goes before the photo reaches the model or the disk.
+            report.photo, width, height = clean_photo(raw, mime)
+        except PhotoError as exc:
+            raise HTTPException(400, str(exc)) from exc
+        report.photo_mime = mime
+        photo_info = {"file": None, "width": width, "height": height, "ext": "png" if mime == "image/png" else "jpg"}
 
     store = get_store()
     result = await ComplaintAgent(store).run(report)
@@ -126,7 +138,13 @@ async def file_complaint(
         duplicate_of=d.get("duplicate_of") or None,
         decision=result.decision,
         trace=result.trace,
+        evidence=result.evidence,
     )
+    if photo_info:
+        photos_dir().mkdir(parents=True, exist_ok=True)
+        photo_info["file"] = f"{complaint_id}.{photo_info.pop('ext')}"
+        (photos_dir() / photo_info["file"]).write_bytes(report.photo)
+        store.set_photo(complaint_id, photo_info)
     body = store.get(complaint_id)
     body["errors"] = result.errors
     if body["duplicate_of"]:
@@ -147,6 +165,14 @@ def get_complaint(complaint_id: int) -> dict:
         raise HTTPException(404, "No such complaint.")
     body["supporters"] = store.supporters(complaint_id)
     return body
+
+
+@app.get("/api/complaints/{complaint_id}/photo")
+def complaint_photo(complaint_id: int) -> FileResponse:
+    body = get_store().get(complaint_id)
+    if body is None or not body["photo"]:
+        raise HTTPException(404, "No photo for this complaint.")
+    return FileResponse(photos_dir() / body["photo"]["file"])
 
 
 # Last, so the /api routes above win over the static files.

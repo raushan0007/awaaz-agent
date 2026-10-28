@@ -138,6 +138,13 @@ class RunState:
     searched: bool = False
     seen_ids: set[int] = field(default_factory=set)
     photo_checks: list[dict] = field(default_factory=list)
+    # Full SAM output (with masks) per successful check; masks are too big to send back to the model.
+    segmentations: list[dict] = field(default_factory=list)
+
+    def best_evidence(self) -> dict | None:
+        """The check that found the most instances: what the officer and citizen see over the photo."""
+        found = [s for s in self.segmentations if s["boxes"]]
+        return max(found, key=lambda s: len(s["boxes"])) if found else None
 
 
 @dataclass
@@ -146,6 +153,7 @@ class AgentResult:
     decision: dict | None
     trace: list[dict]
     errors: list[str] = field(default_factory=list)
+    evidence: dict | None = None
 
 
 def verify_decision(d: dict, state: RunState, has_photo: bool) -> list[str]:
@@ -237,6 +245,7 @@ class ComplaintAgent:
             settings.budget.ensure_room()
             seg = await segment_image(report.photo, report.photo_mime, concept)
             result = {"concept": concept, "instances": len(seg["boxes"]), "boxes": seg["boxes"]}
+            state.segmentations.append({"concept": concept, "boxes": seg["boxes"], "masks": seg["masks"]})
         except Exception as exc:  # noqa: BLE001 - a SAM outage must not sink the whole complaint
             result = {"concept": concept, "error": f"{type(exc).__name__}: {str(exc)[:200]}"}
         state.photo_checks.append(result)
@@ -279,14 +288,15 @@ class ComplaintAgent:
                 if call.function.name == "submit_decision" and "accepted" in result:
                     if result["accepted"]:
                         trace.append(self._step(turn, call.function.name, args, result, started, model_ms))
-                        return self._finish(args, trace)
+                        return self._finish(args, trace, state.best_evidence())
                     last_errors = result["errors"]
                 trace.append(self._step(turn, call.function.name, args, result, started, model_ms))
                 messages.append(
                     {"role": "tool", "tool_call_id": call.id, "content": json.dumps(result, ensure_ascii=False)}
                 )
 
-        return AgentResult("needs_review", None, trace, last_errors or ["Agent did not submit a decision."])
+        return AgentResult("needs_review", None, trace, last_errors or ["Agent did not submit a decision."],
+                           state.best_evidence())
 
     async def _dispatch(self, name: str, args: dict, report: Report, state: RunState) -> dict:
         if name == "search_similar_complaints":
@@ -310,8 +320,9 @@ class ComplaintAgent:
         }
 
     @staticmethod
-    def _finish(decision: dict, trace: list[dict]) -> AgentResult:
+    def _finish(decision: dict, trace: list[dict], evidence: dict | None) -> AgentResult:
         if not decision["is_valid_complaint"]:
-            return AgentResult("rejected", decision, trace)
+            return AgentResult("rejected", decision, trace, evidence=evidence)
         decision = {**decision, "department": DEPARTMENTS[decision["category"]]}
-        return AgentResult("merged" if decision["duplicate_of"] else "open", decision, trace)
+        status = "merged" if decision["duplicate_of"] else "open"
+        return AgentResult(status, decision, trace, evidence=evidence)

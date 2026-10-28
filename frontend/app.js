@@ -5,6 +5,8 @@ const mic = $("mic");
 const meter = $("meter");
 const levels = [];
 let recorder = null;
+let photoBlob = null;
+const MAX_PHOTO_SIDE = 1600;
 
 const PROBLEMS = {
   too_short: "रिकॉर्डिंग बहुत छोटी है",
@@ -99,6 +101,57 @@ async function keepSample(blob, transcript) {
     : `⚠ ${q.problems.map((p) => PROBLEMS[p] || p).join(", ")}${numbers}। सिर्फ़ टेस्ट के लिए सेव: ${q.saved_as}`;
 }
 
+// Re-encoding through a canvas shrinks phone photos (5 MB -> ~300 KB) and drops EXIF/GPS on the device.
+async function shrinkPhoto(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, MAX_PHOTO_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+}
+
+async function pickPhoto(e) {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    photoBlob = await shrinkPhoto(file);
+  } catch {
+    photoBlob = null;
+    $("sendStatus").textContent = "यह फ़ोटो खुल नहीं पाई। कोई दूसरी फ़ोटो चुनें।";
+    return;
+  }
+  $("photoThumb").src = URL.createObjectURL(photoBlob);
+  $("photoPreview").hidden = false;
+}
+
+function removePhoto() {
+  photoBlob = null;
+  $("photoPreview").hidden = true;
+}
+
+function evidenceHtml(c) {
+  if (!c.photo) return "";
+  const { width, height } = c.photo;
+  const ev = c.evidence;
+  const shapes = ev
+    ? ev.masks.map((m) => {
+        const box = ev.boxes.find((b) => b.id === m.id);
+        return box ? `<path class="mask" transform="translate(${box.left} ${box.top})" d="${esc(m.path)}"/>` : "";
+      }).join("") +
+      ev.boxes.map((b) => `<rect class="box" x="${b.left}" y="${b.top}" width="${b.right - b.left}" height="${b.bottom - b.top}" rx="6"/>`).join("")
+    : "";
+  const matches = (c.decision || {}).photo_matches;
+  const note = ev
+    ? `<p class="evidence-note ok">✓ SAM 3.1 ने फ़ोटो में "${esc(ev.concept)}" ${ev.boxes.length} जगह पहचाना</p>`
+    : `<p class="evidence-note warn">⚠ ${matches === "unverified" ? "फ़ोटो की जाँच अभी नहीं हो सकी" : "फ़ोटो में बताई गई समस्या साफ़ नहीं दिखी"}</p>`;
+  return `<div class="evidence"><img src="/api/complaints/${c.id}/photo" alt="शिकायत की फ़ोटो">
+    <svg viewBox="0 0 ${width} ${height}" preserveAspectRatio="none" aria-hidden="true">${shapes}</svg></div>${note}`;
+}
+
 function showResult(c) {
   const d = c.decision || {};
   const dept = d.department ? d.department.name_hi : "";
@@ -121,6 +174,7 @@ function showResult(c) {
       ${c.supporters > 1 ? `<span class="badge">${c.supporters} लोगों ने यही बताया</span>` : ""}
     </div>
     <p class="reply">${esc(d.citizen_reply || (c.errors || []).join(" "))}</p>
+    ${evidenceHtml(c)}
     ${d.rejection_reason ? `<p class="status">कारण: ${esc(d.rejection_reason)}</p>` : ""}
     ${d.formal_letter_hi ? `<details><summary>विभाग को भेजा गया पत्र</summary><div class="letter">${esc(d.formal_letter_hi)}</div></details>` : ""}
     ${steps.length ? `<details><summary>AI ने क्या-क्या जाँचा</summary><ol class="trace">${steps.join("")}</ol></details>` : ""}`;
@@ -135,11 +189,14 @@ async function send() {
   }
   const btn = $("send");
   btn.disabled = true;
-  $("sendStatus").textContent = "AI शिकायत जाँच रहा है… (10–20 सेकंड)";
+  $("sendStatus").textContent = photoBlob
+    ? "AI शिकायत और फ़ोटो जाँच रहा है… (20–40 सेकंड)"
+    : "AI शिकायत जाँच रहा है… (10–20 सेकंड)";
   try {
     const form = new FormData();
     form.append("text", text);
     form.append("area", $("area").value.trim());
+    if (photoBlob) form.append("photo", photoBlob, "photo.jpg");
     showResult(await postForm("/api/complaints", form));
     $("sendStatus").textContent = "";
   } catch (err) {
@@ -151,4 +208,6 @@ async function send() {
 
 mic.addEventListener("click", () => (recorder ? stopRecording() : startRecording()));
 $("send").addEventListener("click", send);
+$("photo").addEventListener("change", pickPhoto);
+$("photoRemove").addEventListener("click", removePhoto);
 drawMeter();

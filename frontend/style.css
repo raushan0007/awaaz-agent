@@ -74,6 +74,23 @@ textarea, input[type=text] {
   width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--bg); color: var(--text); font: inherit;
 }
+.photo-pick { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.pick-btn {
+  display: inline-block; margin: 0; padding: 10px 14px; border-radius: 10px; cursor: pointer;
+  border: 1px dashed var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600;
+}
+.photo-preview { display: flex; align-items: center; gap: 10px; }
+.photo-preview img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
+.link { background: none; border: 0; color: var(--bad); font: inherit; cursor: pointer; text-decoration: underline; }
+.hint { font-size: 13px; color: var(--muted); margin: 6px 0 0; }
+.evidence { position: relative; margin-top: 12px; border-radius: 12px; overflow: hidden; line-height: 0; }
+.evidence img { width: 100%; display: block; }
+.evidence svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.evidence .mask { fill: var(--accent); fill-opacity: .45; }
+.evidence .box { fill: none; stroke: #fff; stroke-width: 3; vector-effect: non-scaling-stroke; }
+.evidence-note { font-size: 14px; margin: 8px 0 0; }
+.evidence-note.ok { color: var(--ok); }
+.evidence-note.warn { color: var(--warn); }
 .send {
   margin-top: 16px; width: 100%; padding: 14px; border: 0; border-radius: 12px;
   background: var(--accent); color: #fff; font: inherit; font-weight: 700; cursor: pointer;

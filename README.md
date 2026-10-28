@@ -30,6 +30,8 @@ uvicorn backend.app.main:app --reload
 - `POST /api/evidence` — `photo` + `concept` (e.g. `pothole`) → SAM boxes/masks, `found`
 - `POST /api/complaints` — `text`, optional `area` and `photo` → the agent's decision and tool trace
 - `GET /api/complaints`, `GET /api/complaints/{id}` — stored complaints with supporter counts
+- `GET /api/complaints/{id}/photo` — the stored photo; EXIF/GPS and text metadata are stripped on upload
+  (the page also re-encodes photos to a 1600 px JPEG on the phone, so GPS never leaves the device)
 - `POST /api/voice-samples` — keeps a recording on this machine, scored for background noise and filed under `good/` or `noisy/` (`AWAAZ_SAMPLES_DIR`)
 
 Open http://localhost:8000/ for the citizen page: tap the mic, speak in Hindi/English, and the
@@ -50,6 +52,9 @@ Devanagari Hindi. High urgency needs a stated reason. A failed check goes back t
 tool result, so it can correct itself (up to 8 turns), and every step is stored as a trace
 officers can read. The department comes from a fixed catalog keyed by category, so the model
 cannot route to a department that does not exist.
+
+When a photo is attached, the result page draws SAM 3.1's masks and boxes over it, so the citizen and
+the officer see exactly what the model found (masks come back box-local and are translated into place).
 
 `python scripts/agent_demo.py [photo.jpg]` runs it live on a new report, a duplicate and spam.
 

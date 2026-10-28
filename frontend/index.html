@@ -30,6 +30,16 @@
       <textarea id="text" rows="5" placeholder="जैसे: वार्ड 5 में गांधी चौक के पास सड़क पर बड़े गड्ढे हैं…"></textarea>
       <label for="area">जगह (वार्ड / मोहल्ला / गाँव)</label>
       <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 5, सुपौल">
+      <label>फ़ोटो (ज़रूरी नहीं, पर मदद करती है)</label>
+      <div class="photo-pick">
+        <label class="pick-btn" for="photo">📷 फ़ोटो लें या चुनें</label>
+        <input id="photo" type="file" accept="image/*" hidden>
+        <div id="photoPreview" class="photo-preview" hidden>
+          <img id="photoThumb" alt="चुनी गई फ़ोटो">
+          <button id="photoRemove" type="button" class="link">हटाएँ</button>
+        </div>
+      </div>
+      <p class="hint">फ़ोटो से लोकेशन (GPS) और फ़ोन की जानकारी हटा दी जाती है।</p>
       <button id="send" class="send">शिकायत भेजें</button>
       <p id="sendStatus" class="status"></p>
     </section>
