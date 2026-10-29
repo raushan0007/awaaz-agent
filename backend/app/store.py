@@ -28,6 +28,27 @@ CREATE TABLE IF NOT EXISTS complaints (
     evidence TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_open ON complaints(status, category, area_key);
+CREATE TABLE IF NOT EXISTS updates (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    complaint_id INTEGER NOT NULL REFERENCES complaints(id),
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL,
+    note TEXT NOT NULL DEFAULT '',
+    message_hi TEXT NOT NULL DEFAULT '',
+    officer TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_updates ON updates(complaint_id);
+CREATE TABLE IF NOT EXISTS officers (
+    username TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    department TEXT NOT NULL,
+    pw_hash TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    token TEXT PRIMARY KEY,
+    username TEXT NOT NULL REFERENCES officers(username),
+    expires_at TEXT NOT NULL
+);
 """
 # Columns added after the first release, so databases made earlier keep working.
 LATER_COLUMNS = {"photo": "TEXT", "evidence": "TEXT"}
@@ -35,7 +56,9 @@ JSON_COLUMNS = ("decision", "photo", "evidence")
 
 # open: routed to a department; merged: a duplicate of an open complaint; rejected: failed
 # verification (spam, not civic); needs_review: the agent could not reach a valid decision.
-OPEN_STATES = ("open",)
+OPEN_STATES = ("open", "in_progress")
+URGENCY_ORDER = "CASE urgency WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END"
+ALL_DEPARTMENTS = "all"  # a district-level officer who sees every department and the review queue
 NUMBER_WORDS = {"no", "number", "नं", "नंबर"}
 
 
@@ -48,6 +71,10 @@ def area_key(area: str) -> str:
 
 def _dump(value: dict | None) -> str | None:
     return json.dumps(value, ensure_ascii=False) if value is not None else None
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
 def _areas_match(a: str, b: str) -> bool:
@@ -116,6 +143,99 @@ class Store:
         ).fetchall()
         key = area_key(area)
         return [self._row(r) for r in rows if _areas_match(key, r["area_key"])]
+
+    def set_category(self, complaint_id: int, category: str) -> None:
+        with self._lock, self._db:
+            self._db.execute("UPDATE complaints SET category = ? WHERE id = ?", (category, complaint_id))
+
+    # --- status updates -------------------------------------------------------------------------
+
+    def add_update(self, complaint_id: int, status: str, note: str, message_hi: str, officer: str) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT INTO updates (complaint_id, created_at, status, note, message_hi, officer)"
+                " VALUES (?,?,?,?,?,?)",
+                (complaint_id, _now(), status, note, message_hi, officer),
+            )
+            self._db.execute("UPDATE complaints SET status = ? WHERE id = ?", (status, complaint_id))
+
+    def updates(self, complaint_id: int) -> list[dict[str, Any]]:
+        rows = self._db.execute(
+            "SELECT created_at, status, message_hi FROM updates WHERE complaint_id = ? ORDER BY id",
+            (complaint_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+    # --- officer views ----------------------------------------------------------------------------
+
+    def _scope(self, department: str) -> tuple[str, list]:
+        if department == ALL_DEPARTMENTS:
+            return "1=1", []
+        if department == "other":  # the grievance cell also clears what the agent could not decide
+            return "(category = ? OR status = 'needs_review')", [department]
+        return "category = ?", [department]
+
+    def queue(self, department: str, limit: int = 100) -> list[dict[str, Any]]:
+        """Open work for one department, most urgent first, then the most-reported."""
+        where, args = self._scope(department)
+        rows = self._db.execute(
+            f"SELECT c.*, (SELECT COUNT(*) FROM complaints d WHERE d.duplicate_of = c.id) + 1 AS supporters"
+            f" FROM complaints c WHERE status IN ('open', 'in_progress', 'needs_review') AND {where}"
+            f" ORDER BY {URGENCY_ORDER}, supporters DESC, id LIMIT ?",
+            (*args, limit),
+        ).fetchall()
+        return [self._row(r) for r in rows]
+
+    def stats(self, department: str, days: int = 30) -> dict[str, Any]:
+        where, args = self._scope(department)
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        recent = f"{where} AND created_at >= ? AND duplicate_of IS NULL"
+        by_status = dict(self._db.execute(
+            f"SELECT status, COUNT(*) FROM complaints WHERE {recent} GROUP BY status", (*args, since)
+        ).fetchall())
+        areas = self._db.execute(
+            # One area may be spelled several ways; show it as it was first reported.
+            f"SELECT (SELECT f.area FROM complaints f WHERE f.area_key = c.area_key ORDER BY f.id LIMIT 1),"
+            f" COUNT(*) AS n, SUM(urgency IN ('high','critical')) AS urgent FROM complaints c"
+            f" WHERE {recent} AND status IN ('open','in_progress') GROUP BY area_key ORDER BY n DESC LIMIT 8",
+            (*args, since),
+        ).fetchall()
+        reports = self._db.execute(
+            f"SELECT COUNT(*) FROM complaints WHERE {where} AND created_at >= ? AND status != 'rejected'",
+            (*args, since),
+        ).fetchone()[0]
+        return {
+            "days": days,
+            "by_status": by_status,
+            "reports": reports,
+            "top_areas": [{"area": a, "open": n, "urgent": u or 0} for a, n, u in areas],
+        }
+
+    # --- officer accounts -------------------------------------------------------------------------
+
+    def add_officer(self, username: str, name: str, department: str, pw_hash: str) -> None:
+        with self._lock, self._db:
+            self._db.execute(
+                "INSERT OR REPLACE INTO officers (username, name, department, pw_hash) VALUES (?,?,?,?)",
+                (username, name, department, pw_hash),
+            )
+
+    def officer(self, username: str) -> dict[str, Any] | None:
+        row = self._db.execute("SELECT * FROM officers WHERE username = ?", (username,)).fetchone()
+        return dict(row) if row else None
+
+    def add_session(self, token: str, username: str, expires_at: str) -> None:
+        with self._lock, self._db:
+            self._db.execute("DELETE FROM sessions WHERE expires_at < ?", (_now(),))
+            self._db.execute("INSERT INTO sessions VALUES (?,?,?)", (token, username, expires_at))
+
+    def session_officer(self, token: str) -> dict[str, Any] | None:
+        row = self._db.execute(
+            "SELECT o.username, o.name, o.department FROM sessions s JOIN officers o USING (username)"
+            " WHERE s.token = ? AND s.expires_at > ?",
+            (token, _now()),
+        ).fetchone()
+        return dict(row) if row else None
 
     def close(self) -> None:
         self._db.close()

@@ -4,13 +4,19 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from typing import Literal
+
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from pydantic import BaseModel, Field
+
+from . import auth, status_writer
 from .agent import ComplaintAgent, Report
 from .audio import save_sample, voice_quality
 from .config import BudgetExceeded, settings
+from .departments import CATEGORIES, DEPARTMENTS
 from .meta_client import transcribe_wav
 from .photos import PhotoError, clean_photo
 from .store import Store
@@ -23,7 +29,7 @@ MAX_TEXT_CHARS = 2000
 PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
-app = FastAPI(title="Awaaz", version="0.2.0")
+app = FastAPI(title="Awaaz", version="0.3.0")
 _store: Store | None = None
 
 
@@ -173,6 +179,113 @@ def complaint_photo(complaint_id: int) -> FileResponse:
     if body is None or not body["photo"]:
         raise HTTPException(404, "No photo for this complaint.")
     return FileResponse(photos_dir() / body["photo"]["file"])
+
+
+@app.get("/api/complaints/{complaint_id}/track")
+def track_complaint(complaint_id: int) -> dict:
+    """What a citizen sees: title, department and the plain-Hindi updates. No report text, no photo."""
+    store = get_store()
+    c = store.get(complaint_id)
+    if c is None:
+        raise HTTPException(404, "No such complaint.")
+    # A merged report follows the complaint it was merged into.
+    main_c = store.get(c["duplicate_of"]) if c["duplicate_of"] else c
+    decision = main_c["decision"] or {}
+    dept = DEPARTMENTS.get(main_c["category"] or "")
+    return {
+        "id": c["id"],
+        "merged_into": c["duplicate_of"],
+        "created_at": c["created_at"],
+        "status": main_c["status"],
+        "title_hi": decision.get("title_hi", ""),
+        "department_hi": dept["name_hi"] if dept else "",
+        "urgency": main_c["urgency"],
+        "supporters": store.supporters(main_c["id"]),
+        "updates": store.updates(main_c["id"]),
+    }
+
+
+# --- officers ---------------------------------------------------------------------------------------
+
+
+class LoginBody(BaseModel):
+    username: str = Field(min_length=1, max_length=40)
+    password: str = Field(min_length=1, max_length=200)
+
+
+class StatusBody(BaseModel):
+    status: Literal["in_progress", "resolved", "rejected", "open"]
+    note: str = Field("", max_length=500)
+    category: str | None = None  # only when routing a needs_review complaint
+
+
+def current_officer(authorization: str = Header("")) -> dict:
+    token = authorization.removeprefix("Bearer ").strip()
+    officer = get_store().session_officer(token) if token else None
+    if officer is None:
+        raise HTTPException(401, "Please log in again.")
+    return officer
+
+
+@app.post("/api/officer/login")
+def officer_login(body: LoginBody) -> dict:
+    result = auth.login(get_store(), body.username.strip(), body.password)
+    if result is None:
+        raise HTTPException(401, "Wrong username or password.")
+    token, officer = result
+    return {"token": token, "officer": officer}
+
+
+@app.get("/api/officer/me")
+def officer_me(officer: dict = Depends(current_officer)) -> dict:
+    return officer
+
+
+@app.get("/api/officer/queue")
+def officer_queue(officer: dict = Depends(current_officer)) -> list[dict]:
+    store = get_store()
+    items = store.queue(officer["department"])
+    for c in items:
+        c["updates"] = store.updates(c["id"])
+    return items
+
+
+@app.get("/api/officer/stats")
+def officer_stats(officer: dict = Depends(current_officer)) -> dict:
+    return get_store().stats(officer["department"])
+
+
+# Which moves an officer may make from each state.
+TRANSITIONS = {
+    "open": {"in_progress", "resolved", "rejected"},
+    "in_progress": {"resolved"},
+    "needs_review": {"open", "rejected"},
+}
+
+
+@app.post("/api/officer/complaints/{complaint_id}/status")
+def officer_set_status(complaint_id: int, body: StatusBody, officer: dict = Depends(current_officer)) -> dict:
+    """Sync on purpose: FastAPI runs it in a worker thread while the open model writes the update."""
+    store = get_store()
+    c = store.get(complaint_id)
+    if c is None:
+        raise HTTPException(404, "No such complaint.")
+    if not auth.can_act_on(officer, c):
+        raise HTTPException(403, "This complaint belongs to another department.")
+    if body.status not in TRANSITIONS.get(c["status"], set()):
+        raise HTTPException(409, f"Cannot move a complaint from '{c['status']}' to '{body.status}'.")
+    if body.status == "rejected" and not body.note.strip():
+        raise HTTPException(400, "Give a reason when closing a complaint.")
+    if c["status"] == "needs_review" and body.status == "open":
+        if body.category not in CATEGORIES:
+            raise HTTPException(400, "Pick the department to route this complaint to.")
+        store.set_category(complaint_id, body.category)
+        c = store.get(complaint_id)
+
+    note = body.note.strip()
+    message, source = status_writer.write_message(c, body.status, note)
+    store.add_update(complaint_id, body.status, note, message, officer["username"])
+    return {"id": complaint_id, "status": body.status, "message_hi": message, "written_by": source}
 
 
 # Last, so the /api routes above win over the static files.

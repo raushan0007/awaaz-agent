@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="hi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Awaaz – अधिकारी डैशबोर्ड</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23d9480f'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="officer">
+  <header class="top wide">
+    <div>
+      <div class="brand">आवाज़ <span>अधिकारी डैशबोर्ड</span></div>
+      <p id="who" class="tag"></p>
+    </div>
+    <button id="logout" class="link" hidden>लॉग आउट</button>
+  </header>
+
+  <main class="wide">
+    <section id="loginCard" class="card login" hidden>
+      <h2>अधिकारी लॉगिन</h2>
+      <form id="loginForm">
+        <label for="user">यूज़रनेम</label>
+        <input id="user" type="text" autocomplete="username" required>
+        <label for="pass">पासवर्ड</label>
+        <input id="pass" type="password" autocomplete="current-password" required>
+        <button class="send" type="submit">लॉगिन</button>
+        <p id="loginStatus" class="status"></p>
+      </form>
+    </section>
+
+    <div id="dash" hidden>
+      <section class="stats" id="stats"></section>
+      <section class="card">
+        <h2>हॉटस्पॉट — जहाँ सबसे ज़्यादा खुली शिकायतें हैं</h2>
+        <div id="areas" class="areas"></div>
+      </section>
+      <section>
+        <div class="queue-head">
+          <h2>काम की सूची <small id="queueCount"></small></h2>
+          <span class="status" id="refreshed"></span>
+        </div>
+        <div id="queue" class="queue"></div>
+      </section>
+    </div>
+  </main>
+  <script type="module" src="officer.js"></script>
+</body>
+</html>

@@ -38,6 +38,24 @@ Open http://localhost:8000/ for the citizen page: tap the mic, speak in Hindi/En
 browser itself encodes 16 kHz mono WAV (`frontend/recorder.js`, no ffmpeg) for Voice Transcribe;
 the transcript lands in the complaint box, ready to send to the agent.
 
+### Officers and citizen updates
+
+- `/officer.html` — department dashboard: open / in-progress / resolved counts, hotspot areas, and a work
+  queue sorted by urgency then by how many people reported the same problem. Each item shows the
+  citizen's words, the photo with SAM's overlay, the Hindi letter and the agent's tool trace.
+- `POST /api/officer/login`, `GET /api/officer/queue`, `GET /api/officer/stats`,
+  `POST /api/officer/complaints/{id}/status` — bearer-token sessions, PBKDF2 passwords, each officer
+  sees only their department (`all` = district officer; `other` also clears the agent's review queue).
+- When an officer moves a complaint, **Muse Spark Open** (open weights, on Baseten) turns the officer's
+  terse note into a plain-Hindi update. The text is checked (Devanagari, length, and no numbers the
+  officer did not give, which is where invented promises hide); on a failed check or an outage the
+  citizen gets a fixed Hindi template instead.
+- `/track.html?id=N` and `GET /api/complaints/{id}/track` — the citizen's view: status steps and updates.
+  Merged reports follow the complaint they were merged into. No report text or photo is shown.
+
+`python scripts/seed_officers.py` creates one demo officer per department plus a district officer;
+passwords are random and go to `backend/data/officers.local.txt` (git-ignored).
+
 ## The complaint agent
 
 `backend/app/agent.py` runs Muse Spark 1.3 in a tool-calling loop (Chat Completions):
