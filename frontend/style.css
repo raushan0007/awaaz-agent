@@ -164,3 +164,4 @@ h3 { font-size: 16px; margin: 18px 0 8px; }
 .act.in_progress, .act.open { background: var(--accent); color: #fff; border-color: transparent; }
 .act.rejected { color: var(--bad); }
 .act:disabled { opacity: .5; cursor: wait; }
+.privacy-note { font-size: 14px; padding: 8px 12px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }

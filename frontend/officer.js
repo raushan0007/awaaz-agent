@@ -86,12 +86,12 @@ function renderStats(s) {
   ];
   $("stats").innerHTML = tiles.map(([label, value, tone]) =>
     `<div class="tile ${tone}"><b>${value}</b><span>${label}</span></div>`).join("");
-  const max = Math.max(1, ...s.top_areas.map((a) => a.open));
+  const max = Math.max(1, ...s.top_areas.map((a) => a.reports));
   $("areas").innerHTML = s.top_areas.length
     ? s.top_areas.map((a) => `<div class="area-row"><span>${esc(a.area || "—")}</span>
-        <div class="bar"><i style="width:${(a.open / max) * 100}%"></i></div>
-        <b>${a.open}</b>${a.urgent ? `<em>${a.urgent} ज़रूरी</em>` : ""}</div>`).join("")
-    : `<p class="status">अभी कोई खुली शिकायत नहीं है।</p>`;
+        <div class="bar"><i style="width:${(a.reports / max) * 100}%"></i></div>
+        <b>${a.reports} रिपोर्ट</b><em>${a.open ? `${a.open} खुली${a.urgent ? `, ${a.urgent} ज़रूरी` : ""}` : "सब हल"}</em></div>`).join("")
+    : `<p class="status">अभी किसी जगह से बार-बार शिकायत नहीं आई है।</p>`;
 }
 
 function actionsHtml(c) {

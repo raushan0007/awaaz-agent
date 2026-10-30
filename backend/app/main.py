@@ -19,6 +19,7 @@ from .config import BudgetExceeded, settings
 from .departments import CATEGORIES, DEPARTMENTS
 from .meta_client import transcribe_wav
 from .photos import PhotoError, clean_photo
+from .privacy import mask_pii
 from .store import Store
 from .vision import segment_image
 
@@ -42,6 +43,15 @@ def get_store() -> Store:
     if _store is None:
         _store = Store(settings.data_dir / "awaaz.db")
     return _store
+
+
+@app.middleware("http")
+async def revalidate_pages(request, call_next):
+    """Pages and scripts are not fingerprinted, so make browsers re-check them (cheap 304s via ETag)."""
+    response = await call_next(request)
+    if not request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
 
 
 @app.exception_handler(BudgetExceeded)
@@ -116,6 +126,10 @@ async def file_complaint(
         raise HTTPException(400, f"Describe the problem in 5 to {MAX_TEXT_CHARS} characters.")
     if len(area) > 80:
         raise HTTPException(400, "Area must be under 80 characters.")
+    # Personal numbers never reach the model, the officers or the database.
+    text, hidden_text = mask_pii(text)
+    area, hidden_area = mask_pii(area)
+    hidden = sorted(set(hidden_text + hidden_area))
     report = Report(text=text, area=area)
     photo_info = None
     if photo is not None and photo.filename:
@@ -145,6 +159,7 @@ async def file_complaint(
         decision=result.decision,
         trace=result.trace,
         evidence=result.evidence,
+        masked=hidden,
     )
     if photo_info:
         photos_dir().mkdir(parents=True, exist_ok=True)

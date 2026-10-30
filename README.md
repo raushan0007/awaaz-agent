@@ -56,6 +56,20 @@ the transcript lands in the complaint box, ready to send to the agent.
 `python scripts/seed_officers.py` creates one demo officer per department plus a district officer;
 passwords are random and go to `backend/data/officers.local.txt` (git-ignored).
 
+`python scripts/seed_demo.py` then fills a fresh database with two weeks of Supaul reports **through
+the live API**: every routing, urgency, merge, Hindi letter and citizen update on the demo dashboard is
+real model output. Reports and officer actions are replayed in time order; only the timestamps are
+moved back afterwards.
+
+### Privacy
+
+- Mobile, Aadhaar, email and PAN numbers in a report are replaced with a visible tag
+  (`[मोबाइल नंबर छिपाया गया]`) before the model, the officers or the database see them
+  (`backend/app/privacy.py`, Devanagari digits included); the citizen is told what was hidden.
+- Photos lose EXIF/GPS on the phone and again on the server.
+- The public tracking page shows only the title, department and updates, never the report text or photo.
+- Citizen data only goes to `muse-spark-1.3`, never the `-contributor` models that train on prompts.
+
 ## The complaint agent
 
 `backend/app/agent.py` runs Muse Spark 1.3 in a tool-calling loop (Chat Completions):

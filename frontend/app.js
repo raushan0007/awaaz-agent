@@ -7,6 +7,7 @@ const levels = [];
 let recorder = null;
 let photoBlob = null;
 const MAX_PHOTO_SIDE = 1600;
+const HIDDEN = { mobile: "मोबाइल नंबर", aadhaar: "आधार नंबर", email: "ईमेल", pan: "PAN" };
 
 const PROBLEMS = {
   too_short: "रिकॉर्डिंग बहुत छोटी है",
@@ -142,6 +143,7 @@ function showResult(c) {
       ${c.supporters > 1 ? `<span class="badge">${c.supporters} लोगों ने यही बताया</span>` : ""}
     </div>
     <p class="reply">${esc(d.citizen_reply || (c.errors || []).join(" "))}</p>
+    ${(c.masked || []).length ? `<p class="privacy-note">🔒 आपकी निजी जानकारी (${c.masked.map((k) => HIDDEN[k] || k).join(", ")}) छिपा दी गई है — यह किसी अधिकारी या AI को नहीं दिखेगी।</p>` : ""}
     ${evidenceHtml(c)}
     ${d.rejection_reason ? `<p class="status">कारण: ${esc(d.rejection_reason)}</p>` : ""}
     ${d.formal_letter_hi ? `<details><summary>विभाग को भेजा गया पत्र</summary><div class="letter">${esc(d.formal_letter_hi)}</div></details>` : ""}

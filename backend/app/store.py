@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS complaints (
     decision TEXT,
     trace TEXT,
     photo TEXT,
-    evidence TEXT
+    evidence TEXT,
+    masked TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_open ON complaints(status, category, area_key);
 CREATE TABLE IF NOT EXISTS updates (
@@ -51,8 +52,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 """
 # Columns added after the first release, so databases made earlier keep working.
-LATER_COLUMNS = {"photo": "TEXT", "evidence": "TEXT"}
-JSON_COLUMNS = ("decision", "photo", "evidence")
+LATER_COLUMNS = {"photo": "TEXT", "evidence": "TEXT", "masked": "TEXT"}
+JSON_COLUMNS = ("decision", "photo", "evidence", "masked")
 
 # open: routed to a department; merged: a duplicate of an open complaint; rejected: failed
 # verification (spam, not civic); needs_review: the agent could not reach a valid decision.
@@ -69,7 +70,7 @@ def area_key(area: str) -> str:
     return " ".join(w for w in text.split() if w not in NUMBER_WORDS)
 
 
-def _dump(value: dict | None) -> str | None:
+def _dump(value: dict | list | None) -> str | None:
     return json.dumps(value, ensure_ascii=False) if value is not None else None
 
 
@@ -98,15 +99,16 @@ class Store:
 
     def add(self, *, text: str, area: str, has_photo: bool, status: str, category: str | None,
             urgency: str | None, duplicate_of: int | None, decision: dict | None, trace: list,
-            evidence: dict | None = None) -> int:
+            evidence: dict | None = None, masked: list[str] | None = None) -> int:
         with self._lock, self._db:
             cur = self._db.execute(
                 "INSERT INTO complaints (created_at, text, area, area_key, has_photo, status, category,"
-                " urgency, duplicate_of, decision, trace, evidence) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                " urgency, duplicate_of, decision, trace, evidence, masked) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     text, area, area_key(area), int(has_photo), status, category, urgency, duplicate_of,
                     _dump(decision), json.dumps(trace, ensure_ascii=False), _dump(evidence),
+                    json.dumps(masked or []),
                 ),
             )
             return cur.lastrowid
@@ -193,11 +195,17 @@ class Store:
         by_status = dict(self._db.execute(
             f"SELECT status, COUNT(*) FROM complaints WHERE {recent} GROUP BY status", (*args, since)
         ).fetchall())
+        # A hotspot is where reports keep coming (merged ones and fixed-then-recurring ones count too),
+        # not just where something is open right now.
         areas = self._db.execute(
             # One area may be spelled several ways; show it as it was first reported.
             f"SELECT (SELECT f.area FROM complaints f WHERE f.area_key = c.area_key ORDER BY f.id LIMIT 1),"
-            f" COUNT(*) AS n, SUM(urgency IN ('high','critical')) AS urgent FROM complaints c"
-            f" WHERE {recent} AND status IN ('open','in_progress') GROUP BY area_key ORDER BY n DESC LIMIT 8",
+            f" COUNT(*) AS n,"
+            f" SUM(status IN ('open','in_progress') AND duplicate_of IS NULL) AS still_open,"
+            f" SUM(status IN ('open','in_progress') AND duplicate_of IS NULL"
+            f"     AND urgency IN ('high','critical')) AS urgent"
+            f" FROM complaints c WHERE {where} AND created_at >= ? AND status != 'rejected' AND area_key != ''"
+            f" GROUP BY area_key HAVING n > 1 ORDER BY n DESC, still_open DESC LIMIT 8",
             (*args, since),
         ).fetchall()
         reports = self._db.execute(
@@ -208,7 +216,7 @@ class Store:
             "days": days,
             "by_status": by_status,
             "reports": reports,
-            "top_areas": [{"area": a, "open": n, "urgent": u or 0} for a, n, u in areas],
+            "top_areas": [{"area": a, "reports": n, "open": o or 0, "urgent": u or 0} for a, n, o, u in areas],
         }
 
     # --- officer accounts -------------------------------------------------------------------------

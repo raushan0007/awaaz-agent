@@ -86,7 +86,8 @@ def test_stats_count_areas_without_duplicates(client, store):
     stats = client.get("/api/officer/stats", headers=headers(client, "roads.officer", "road-pass")).json()
     assert stats["by_status"] == {"open": 3}
     assert stats["reports"] == 4
-    assert stats["top_areas"][0] == {"area": "Ward 5, Supaul", "open": 2, "urgent": 1}
+    # Ward 5 had three reports (one merged); Ward 9 had only one, so it is not a hotspot.
+    assert stats["top_areas"] == [{"area": "Ward 5, Supaul", "reports": 3, "open": 2, "urgent": 1}]
 
 
 def test_status_flow_reaches_citizen_and_merged_reports(client, store, open_model):
@@ -154,4 +155,6 @@ def test_open_model_outage_falls_back_to_template(monkeypatch):
 
 def test_pages_are_served(client):
     for page in ("/officer.html", "/track.html", "/officer.js", "/track.js", "/shared.js"):
-        assert client.get(page).status_code == 200, page
+        r = client.get(page)
+        assert r.status_code == 200, page
+        assert r.headers["cache-control"] == "no-cache"  # a redeploy must not leave stale scripts

@@ -37,8 +37,13 @@ Work in this order:
    disputes, requests for medical or legal advice, and anything about political parties, leaders or
    elections. If rejected, call submit_decision right away with is_valid_complaint=false.
 2. Call search_similar_complaints with the area and category to find open complaints about the SAME
-   problem at the SAME place. Only mark a duplicate when it is clearly the same issue (same street /
-   landmark / problem), not just the same category in the same ward.
+   problem at the SAME place. Write the area in English as "Ward <number>, Supaul" whenever a ward
+   number is given (also for Hindi reports), otherwise the locality name in English.
+   It IS a duplicate when it is the same kind of problem on the same street or at the same landmark,
+   or plainly the same thing ("abhi tak theek nahi hua", "phir se", "still"), even if the new report
+   adds details such as a new accident or that it got worse: merging adds the citizen as a supporter,
+   which raises the complaint's priority. It is NOT a duplicate when only the ward and category match
+   but the place or the problem differs.
 3. If a photo is attached, call check_photo with a short English noun phrase for what the photo should
    show (e.g. "pothole", "garbage pile", "broken street light", "water puddle"). You may try up to
    {MAX_PHOTO_CHECKS} phrases.
@@ -227,6 +232,7 @@ class ComplaintAgent:
                     "id": c["id"],
                     "reported_at": c["created_at"],
                     "area": c["area"],
+                    "status": c["status"],
                     "title": (c["decision"] or {}).get("title_en", ""),
                     "report": c["text"][:300],
                     "supporters": self.store.supporters(c["id"]),
