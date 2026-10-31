@@ -1,0 +1,17 @@
+# Render blueprint: New > Blueprint > pick this repo. Render asks for the three secrets below.
+# The free plan has no persistent disk, so every restart starts again from the demo database.
+services:
+  - type: web
+    name: awaaz
+    runtime: docker
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      - key: MODEL_API_KEY
+        sync: false
+      - key: BASETEN_API_KEY
+        sync: false
+      - key: AWAAZ_DEMO_OFFICER_PASSWORD
+        sync: false
+      - key: AWAAZ_DAILY_BUDGET_USD
+        value: "3"
