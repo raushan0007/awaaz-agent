@@ -18,7 +18,7 @@ from . import auth, status_writer
 from .agent import ComplaintAgent, Report
 from .audio import save_sample, voice_quality
 from .config import BudgetExceeded, settings
-from .departments import CATEGORIES, DEPARTMENTS
+from .departments import CATEGORIES, DEFAULT_TOWN, DEPARTMENTS, TOWNS
 from .meta_client import transcribe_wav
 from .photos import PhotoError, clean_photo
 from .privacy import mask_pii
@@ -135,9 +135,12 @@ async def evidence(photo: UploadFile = File(...), concept: str = Form(...)) -> d
 
 @app.post("/api/complaints")
 async def file_complaint(
-    text: str = Form(...), area: str = Form(""), photo: UploadFile | None = File(None)
+    text: str = Form(...), area: str = Form(""), town: str = Form(DEFAULT_TOWN),
+    photo: UploadFile | None = File(None),
 ) -> dict:
     text, area = text.strip(), area.strip()
+    if town not in TOWNS:
+        raise HTTPException(400, f"Town must be one of: {', '.join(TOWNS)}.")
     if len(text) < 5 or len(text) > MAX_TEXT_CHARS:
         raise HTTPException(400, f"Describe the problem in 5 to {MAX_TEXT_CHARS} characters.")
     if len(area) > 80:
@@ -146,7 +149,7 @@ async def file_complaint(
     text, hidden_text = mask_pii(text)
     area, hidden_area = mask_pii(area)
     hidden = sorted(set(hidden_text + hidden_area))
-    report = Report(text=text, area=area)
+    report = Report(text=text, area=area, town=town)
     photo_info = None
     if photo is not None and photo.filename:
         raw = await photo.read()
@@ -186,7 +189,16 @@ async def file_complaint(
     body["errors"] = result.errors
     if body["duplicate_of"]:
         body["supporters"] = store.supporters(body["duplicate_of"])
+    # The citizen sees the whole picture of their place, not just their own ticket.
+    body["area_summary"] = store.area_summary(body["area"]) if body["area"] else None
     return body
+
+
+@app.get("/api/areas/summary")
+def area_summary(area: str) -> dict:
+    if not area.strip() or len(area) > 80:
+        raise HTTPException(400, "Give an area under 80 characters.")
+    return get_store().area_summary(area.strip())
 
 
 @app.get("/api/complaints")

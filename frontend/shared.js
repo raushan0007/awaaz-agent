@@ -51,3 +51,28 @@ export function traceHtml(trace) {
   });
   return steps.length ? `<details><summary>AI ने क्या-क्या जाँचा</summary><ol class="trace">${steps.join("")}</ol></details>` : "";
 }
+
+export const CATEGORY = {
+  roads: "सड़क", water: "पानी", electricity: "बिजली", streetlight: "स्ट्रीट लाइट",
+  sanitation: "सफ़ाई", drainage: "नाला", other: "अन्य",
+};
+
+// The whole picture of one place: every problem reported there and where each one stands.
+export function areaHtml(s) {
+  if (!s || !s.problems) return "";
+  const n = (k) => s.by_status[k] || 0;
+  const cats = Object.entries(s.by_category)
+    .map(([k, v]) => `<span class="badge">${esc(CATEGORY[k] || k)}: ${v}</span>`).join("");
+  const items = s.items.map((i) => `<li>
+      <a href="/track.html?id=${i.id}">#${i.id}</a> ${esc(i.title_hi || CATEGORY[i.category] || "")}
+      <span class="badge ${esc(i.status)}">${esc(STATUS[i.status] || i.status)}</span>
+      ${i.supporters > 1 ? `<small>${i.supporters} लोगों ने बताया</small>` : ""}
+      <small>${formatTime(i.created_at)}</small></li>`).join("");
+  return `<section class="area-summary">
+    <h3>📍 ${esc(s.area)} — इस जगह का पूरा हाल</h3>
+    <p>${s.problems} समस्याएँ, ${s.reports} रिपोर्ट · ${n("open") + n("in_progress")} बाकी
+      (${n("in_progress")} पर काम चल रहा) · ${n("resolved")} हल हुईं</p>
+    <div class="badges">${cats}</div>
+    <ul>${items}</ul>
+  </section>`;
+}

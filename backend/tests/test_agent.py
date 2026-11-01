@@ -197,3 +197,47 @@ def test_complaint_endpoint_stores_and_counts_supporters(tmp_path, monkeypatch):
     assert client.get(f"/api/complaints/{parent}").json()["supporters"] == 2
     assert len(client.get("/api/complaints").json()) == 2
     assert client.get("/api/complaints/999").status_code == 404
+
+
+def test_area_must_end_with_the_citizens_town():
+    searched = RunState(searched=True)
+    assert verify_decision(decision(area="Ward 8, Forbesganj"), searched, False, "Forbesganj") == []
+    errors = verify_decision(decision(area="Ward 8"), searched, False, "Forbesganj")
+    assert any("Ward 8, Forbesganj" in e for e in errors)
+    assert verify_decision(decision(area="Ward 8, Supaul"), searched, False, "Forbesganj")
+
+
+async def test_search_stays_inside_the_citizens_town(store):
+    supaul = seed_open(store, area="Ward 8, Supaul")
+    forbesganj = seed_open(store, area="Ward 8, Forbesganj")
+    search = ("search_similar_complaints", {"area": "Ward 8", "category": "roads", "keywords": ["gaddha"]})
+    client = ScriptedClient(completion(search), completion(("submit_decision", decision(area="Ward 8, Forbesganj"))))
+    result = await ComplaintAgent(store, client).run(Report("ward 8 gaddha", "Ward 8", town="Forbesganj"))
+    assert [m["id"] for m in result.trace[0]["result"]["matches"]] == [forbesganj]
+    assert supaul != forbesganj and result.status == "open"
+    assert "Town: Forbesganj" in client.sent[0][1]["content"]
+
+
+def test_area_summary_shows_the_whole_place_without_report_text(tmp_path, monkeypatch):
+    store = Store(tmp_path / "a.db")
+    monkeypatch.setattr(main, "_store", store)
+    first = seed_open(store, text="secret details", area="Ward 8, Forbesganj")
+    store.add(text="same again", area="Ward 8, Forbesganj", has_photo=False, status="merged", category="roads",
+              urgency="medium", duplicate_of=first, decision=decision(), trace=[])
+    store.add(text="naali jam", area="Ward 8, Forbesganj", has_photo=False, status="resolved",
+              category="drainage", urgency="high", duplicate_of=None, decision=decision(), trace=[])
+    seed_open(store, area="Ward 8, Supaul")
+    client = TestClient(main.app)
+    s = client.get("/api/areas/summary", params={"area": "Ward 8, Forbesganj"}).json()
+    assert (s["problems"], s["reports"]) == (2, 3)
+    assert s["by_status"] == {"open": 1, "resolved": 1}
+    assert s["by_category"] == {"roads": 1, "drainage": 1}
+    assert s["items"][1]["supporters"] == 2
+    assert "secret details" not in json.dumps(s)
+    assert client.get("/api/areas/summary", params={"area": " "}).status_code == 400
+
+
+def test_complaint_endpoint_rejects_unknown_town(tmp_path, monkeypatch):
+    monkeypatch.setattr(main, "_store", Store(tmp_path / "a.db"))
+    r = TestClient(main.app).post("/api/complaints", data={"text": "sadak tooti hai", "town": "Patna"})
+    assert r.status_code == 400

@@ -37,7 +37,7 @@ TEMPLATES = {
     "open": "आपकी शिकायत \"{title}\" {dept} को भेज दी गई है। आगे की जानकारी यहीं मिलेगी।",
 }
 
-PROMPT = """You write status updates for citizens of Supaul, Bihar about their civic complaint.
+PROMPT = """You write status updates for citizens of Supaul and Forbesganj, Bihar about their civic complaint.
 Write exactly 1 or 2 short, polite sentences in simple Hindi (Devanagari script), as a government
 helpdesk would. Say what has happened and what happens next. Use only facts given below; do not
 add dates, times, names, phone numbers or promises that are not in the officer's note. No greeting,

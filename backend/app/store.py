@@ -146,6 +146,41 @@ class Store:
         key = area_key(area)
         return [self._row(r) for r in rows if _areas_match(key, r["area_key"])]
 
+    def area_summary(self, area: str, limit: int = 10) -> dict[str, Any]:
+        """Everything the public may know about one place: its problems, their state, how many reported them.
+
+        Titles and status only, never report text or photos (same rule as the tracking page)."""
+        key = area_key(area)
+        rows = [r for r in self._db.execute(
+            "SELECT id, created_at, area_key, status, category, urgency, duplicate_of, decision FROM complaints"
+            " WHERE status NOT IN ('rejected', 'needs_review') ORDER BY id DESC"
+        ).fetchall() if _areas_match(key, r["area_key"])]
+        problems = [r for r in rows if r["duplicate_of"] is None]
+        by_status: dict[str, int] = {}
+        by_category: dict[str, int] = {}
+        for r in problems:
+            by_status[r["status"]] = by_status.get(r["status"], 0) + 1
+            by_category[r["category"]] = by_category.get(r["category"], 0) + 1
+        return {
+            "area": area,
+            "reports": len(rows),
+            "problems": len(problems),
+            "by_status": by_status,
+            "by_category": dict(sorted(by_category.items(), key=lambda kv: -kv[1])),
+            "items": [
+                {
+                    "id": r["id"],
+                    "created_at": r["created_at"],
+                    "status": r["status"],
+                    "category": r["category"],
+                    "urgency": r["urgency"],
+                    "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", ""),
+                    "supporters": self.supporters(r["id"]),
+                }
+                for r in problems[:limit]
+            ],
+        }
+
     def set_category(self, complaint_id: int, category: str) -> None:
         with self._lock, self._db:
             self._db.execute("UPDATE complaints SET category = ? WHERE id = ?", (category, complaint_id))

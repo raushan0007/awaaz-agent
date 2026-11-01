@@ -29,8 +29,13 @@
     <section class="card">
       <label for="text">आपकी शिकायत</label>
       <textarea id="text" rows="5" placeholder="जैसे: वार्ड 5 में गांधी चौक के पास सड़क पर बड़े गड्ढे हैं…"></textarea>
-      <label for="area">जगह (वार्ड / मोहल्ला / गाँव)</label>
-      <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 5, सुपौल">
+      <label for="town">शहर</label>
+      <select id="town">
+        <option value="Supaul">सुपौल</option>
+        <option value="Forbesganj">फारबिसगंज</option>
+      </select>
+      <label for="area">जगह (वार्ड / मोहल्ला / चौक)</label>
+      <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 8, सुभाष चौक">
       <label>फ़ोटो (ज़रूरी नहीं, पर मदद करती है)</label>
       <div class="photo-pick">
         <label class="pick-btn" for="photo">📷 फ़ोटो लें या चुनें</label>

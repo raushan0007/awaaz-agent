@@ -1,5 +1,5 @@
 import { Recorder } from "./recorder.js";
-import { $, esc, evidenceHtml, STATUS, traceHtml, URGENCY } from "./shared.js";
+import { $, areaHtml, esc, evidenceHtml, STATUS, traceHtml, URGENCY } from "./shared.js";
 
 const mic = $("mic");
 const meter = $("meter");
@@ -147,6 +147,7 @@ function showResult(c) {
     ${evidenceHtml(c)}
     ${d.rejection_reason ? `<p class="status">कारण: ${esc(d.rejection_reason)}</p>` : ""}
     ${d.formal_letter_hi ? `<details><summary>विभाग को भेजा गया पत्र</summary><div class="letter">${esc(d.formal_letter_hi)}</div></details>` : ""}
+    ${areaHtml(c.area_summary)}
     ${traceHtml(c.trace)}
     ${c.status !== "rejected" ? `<a class="track-link" href="/track.html?id=${c.id}">शिकायत संख्या #${c.id} — आगे का हाल यहाँ देखें →</a>` : ""}`;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -167,6 +168,7 @@ async function send() {
     const form = new FormData();
     form.append("text", text);
     form.append("area", $("area").value.trim());
+    form.append("town", $("town").value);
     if (photoBlob) form.append("photo", photoBlob, "photo.jpg");
     showResult(await postForm("/api/complaints", form));
     $("sendStatus").textContent = "";

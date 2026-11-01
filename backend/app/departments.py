@@ -40,6 +40,10 @@ DEPARTMENTS: dict[str, dict[str, str]] = {
     },
 }
 
+# Towns Awaaz serves: English name (used in stored areas) -> Hindi name. Every area ends with one of these.
+TOWNS: dict[str, str] = {"Supaul": "सुपौल", "Forbesganj": "फारबिसगंज"}
+DEFAULT_TOWN = "Supaul"
+
 CATEGORIES = list(DEPARTMENTS)
 URGENCIES = ["low", "medium", "high", "critical"]
 

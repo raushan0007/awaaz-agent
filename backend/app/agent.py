@@ -16,9 +16,9 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from .config import settings
-from .departments import CATEGORIES, DEPARTMENTS, URGENCIES, catalog_text
+from .departments import CATEGORIES, DEFAULT_TOWN, DEPARTMENTS, TOWNS, URGENCIES, catalog_text
 from .meta_client import async_meta_client
-from .store import Store
+from .store import Store, area_key
 from .vision import segment_image
 
 MAX_TURNS = 8
@@ -26,7 +26,8 @@ MAX_PHOTO_CHECKS = 3
 DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 
 SYSTEM_PROMPT = f"""You are Awaaz, an assistant that turns a citizen's report about a local civic problem
-in Supaul, Bihar (India) into a formal complaint for the right government department.
+in Bihar (India) into a formal complaint for the right government department. Awaaz serves these
+towns: {", ".join(TOWNS)}. The citizen picks the town; it is given with the report.
 Reports arrive in Hindi, English or Hinglish, often typed from a voice note, with spelling mistakes.
 
 Departments (pick the category key):
@@ -37,8 +38,8 @@ Work in this order:
    disputes, requests for medical or legal advice, and anything about political parties, leaders or
    elections. If rejected, call submit_decision right away with is_valid_complaint=false.
 2. Call search_similar_complaints with the area and category to find open complaints about the SAME
-   problem at the SAME place. Write the area in English as "Ward <number>, Supaul" whenever a ward
-   number is given (also for Hindi reports), otherwise the locality name in English.
+   problem at the SAME place. Write the area in English and end it with the town: "Ward <number>, <Town>"
+   whenever a ward number is given (also for Hindi reports), otherwise "<Locality>, <Town>".
    It IS a duplicate when it is the same kind of problem on the same street or at the same landmark,
    or plainly the same thing ("abhi tak theek nahi hua", "phir se", "still"), even if the new report
    adds details such as a new accident or that it got worse: merging adds the citizen as a supporter,
@@ -68,7 +69,7 @@ TOOLS: list[dict[str, Any]] = [
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "area": {"type": "string", "description": "Ward / locality / village, e.g. 'Ward 5, Supaul'"},
+                    "area": {"type": "string", "description": "Ward or locality, then the town, e.g. 'Ward 5, Supaul'"},
                     "category": {"type": "string", "enum": CATEGORIES},
                     "keywords": {
                         "type": "array",
@@ -136,6 +137,12 @@ class Report:
     area: str = ""
     photo: bytes | None = None
     photo_mime: str = "image/jpeg"
+    town: str = DEFAULT_TOWN
+
+
+def in_town(area: str, town: str) -> str:
+    """Pin an area to the citizen's town, so 'Ward 8' in one town never matches 'Ward 8' in another."""
+    return area if area_key(area).endswith(area_key(town)) else f"{area.strip()}, {town}"
 
 
 @dataclass
@@ -161,7 +168,7 @@ class AgentResult:
     evidence: dict | None = None
 
 
-def verify_decision(d: dict, state: RunState, has_photo: bool) -> list[str]:
+def verify_decision(d: dict, state: RunState, has_photo: bool, town: str = DEFAULT_TOWN) -> list[str]:
     """Every rule here is checkable from the tool results; none of it trusts the model's say-so."""
     errors: list[str] = []
     if not d["is_valid_complaint"]:
@@ -177,6 +184,8 @@ def verify_decision(d: dict, state: RunState, has_photo: bool) -> list[str]:
         errors.append(f"duplicate_of={d['duplicate_of']} was not returned by search_similar_complaints.")
     if not d["area"].strip():
         errors.append("area is required.")
+    elif not area_key(d["area"]).endswith(area_key(town)):
+        errors.append(f"area must end with the citizen's town, e.g. '{d['area'].strip()}, {town}'.")
     if not d["title_en"].strip() or not d["title_hi"].strip():
         errors.append("title_en and title_hi are required.")
     if d["urgency"] in ("high", "critical") and not d["urgency_reason"].strip():
@@ -222,8 +231,9 @@ class ComplaintAgent:
         self.client = client
         self.model = model or settings.reasoning_model
 
-    async def _search(self, args: dict, state: RunState) -> dict:
-        found = _rank(self.store.find_open(args["area"], args["category"]), args.get("keywords", []))[:5]
+    async def _search(self, args: dict, report: Report, state: RunState) -> dict:
+        area = in_town(args["area"], report.town)
+        found = _rank(self.store.find_open(area, args["category"]), args.get("keywords", []))[:5]
         state.searched = True
         state.seen_ids.update(c["id"] for c in found)
         return {
@@ -261,7 +271,7 @@ class ComplaintAgent:
         client = self.client or async_meta_client()
         state = RunState()
         trace: list[dict] = []
-        user = f"Area given by citizen: {report.area or '(not given)'}\n"
+        user = f"Town: {report.town}\nArea given by citizen: {report.area or '(not given)'}\n"
         user += f"Photo attached: {'yes' if report.photo else 'no'}\n\nReport:\n{report.text}"
         messages: list[dict] = [{"role": "system", "content": SYSTEM_PROMPT}, {"role": "user", "content": user}]
         last_errors: list[str] = []
@@ -306,11 +316,11 @@ class ComplaintAgent:
 
     async def _dispatch(self, name: str, args: dict, report: Report, state: RunState) -> dict:
         if name == "search_similar_complaints":
-            return await self._search(args, state)
+            return await self._search(args, report, state)
         if name == "check_photo":
             return await self._check_photo(args, report, state)
         if name == "submit_decision":
-            errors = verify_decision(args, state, report.photo is not None)
+            errors = verify_decision(args, state, report.photo is not None, report.town)
             return {"accepted": not errors, "errors": errors}
         return {"error": f"Unknown tool {name!r}."}
 

@@ -6,7 +6,7 @@ Built for the **Meta Global AI Developer Hackathon** (Oct 27 – Nov 4, 2026), I
 
 In small-town India a broken road, a dry tap or a live wire hanging over a roof usually goes unreported: the
 forms are in English, the offices are far, and nobody knows which department owns the problem. **Awaaz**
-("voice") lets a citizen in Supaul, Bihar just *say* the problem in Hindi, Hinglish or English, add a photo, and
+("voice") lets a citizen in Supaul or Forbesganj, Bihar just *say* the problem in Hindi, Hinglish or English, add a photo, and
 get back a tracking number. An agent turns the report into a formal complaint for the right department,
 checks the photo, merges it with reports of the same problem, and keeps the citizen updated in plain Hindi.
 
@@ -16,6 +16,7 @@ checks the photo, merges it with reports of the same problem, and keeps the citi
 | Gets the department, urgency and a tracking number in seconds | Sees why: the agent's tool trace, the photo with SAM's mask, a ready Hindi letter |
 | Phone and Aadhaar numbers are hidden before anyone sees the report | Hotspots show where the same problems keep coming back |
 | Reads updates in simple Hindi, written from the officer's own note | Writes a two-word note; the citizen gets a proper Hindi update |
+| Sees the whole picture of their place: every problem reported there and where each stands | |
 
 ## How it works
 
@@ -68,6 +69,8 @@ Citizen data only goes to the standard models, never the `-contributor` variants
 The final decision is **checked in code, not trusted** (`verify_decision`):
 
 - a duplicate must be an id the search actually returned, and the search must have run;
+- the area must end with the town the citizen picked, and the search is pinned to that town in code,
+  so "Ward 8" in Forbesganj never merges with "Ward 8" in Supaul;
 - "the photo shows it" must agree with SAM's counts, and a photo must have been checked at all;
 - high or critical urgency needs a stated reason; the letter must really be Devanagari Hindi;
 - the department comes from a fixed catalog keyed by category, so the model cannot invent one.
@@ -93,7 +96,8 @@ A failed check or a Baseten outage falls back to a fixed Hindi template, so the 
 about a minute to wake up). Citizen page `/`, tracking `/track.html`, officer dashboard `/officer.html`
 (demo login in the submission notes). The demo database holds two weeks of Supaul reports
 that went through the live agent (`scripts/seed_demo.py`): every routing, merge, letter and update is real
-model output; only the timestamps were moved back.
+model output; only the timestamps were moved back. The three Forbesganj reports carry real photos taken on
+the spot on Oct 30 (`scripts/seed_photos.py`), filed at the time each photo was taken.
 
 **Run locally** (Python 3.12+):
 
@@ -120,8 +124,9 @@ and a `demo.officer` login is created with that password.
 | Endpoint | |
 |---|---|
 | `POST /api/transcribe` | WAV (mono, 16-bit, 16/24 kHz) → transcript |
-| `POST /api/complaints` | `text`, optional `area`, `photo` → the agent's decision and tool trace |
+| `POST /api/complaints` | `text`, `town`, optional `area`, `photo` → the agent's decision, tool trace and area overview |
 | `GET /api/complaints/{id}/track` | the citizen's view: status and Hindi updates |
+| `GET /api/areas/summary?area=` | one place's problems, their status and supporters (no report text or photos) |
 | `GET /api/complaints/{id}/photo` | the stored, metadata-free photo |
 | `POST /api/officer/login` | officer login → bearer token |
 | `GET /api/officer/queue`, `/stats` | the department's work queue and hotspots |
@@ -136,7 +141,7 @@ and a `demo.officer` login is created with that password.
 python -m pytest -q backend/tests
 ```
 
-57 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
+62 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
 photo metadata stripping, officer scoping and status rules, the open-model fallback, and the demo bootstrap.
 `python scripts/smoke_test.py sample.wav photo.jpg` calls every live model once;
 `python scripts/agent_demo.py` runs the agent live on a new report, a duplicate and spam.
@@ -151,9 +156,10 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 | Oct 29 | Officer dashboard, Muse Spark Open status updates, citizen tracking |
 | Oct 30 | PII masking, demo data through the live API, better duplicate merging, hotspots |
 | Oct 31 | Docker / Render deployment, demo database, this README |
+| Nov 1 | Second town (Forbesganj), town-scoped duplicate search, area overview, real photo reports |
 
 ## Known limits
 
-- One district's departments are hard-coded (`backend/app/departments.py`); a real rollout would load them per district.
+- Towns and departments are hard-coded (`backend/app/departments.py`); a real rollout would load them per district.
 - SQLite and a single server process are enough for a district, not a state.
 - Citizens get updates on the tracking page only; SMS/WhatsApp delivery is the obvious next step.

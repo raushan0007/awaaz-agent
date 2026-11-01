@@ -70,7 +70,7 @@ audio { width: 100%; margin-top: 12px; }
 
 label { display: block; font-weight: 600; margin: 12px 0 6px; }
 label:first-child { margin-top: 0; }
-textarea, input[type=text] {
+textarea, input[type=text], select {
   width: 100%; padding: 12px; border-radius: 10px; border: 1px solid var(--line);
   background: var(--bg); color: var(--text); font: inherit;
 }
@@ -79,6 +79,7 @@ textarea, input[type=text] {
   display: inline-block; margin: 0; padding: 10px 14px; border-radius: 10px; cursor: pointer;
   border: 1px dashed var(--accent); color: var(--accent); background: var(--accent-soft); font-weight: 600;
 }
+[hidden] { display: none !important; }
 .photo-preview { display: flex; align-items: center; gap: 10px; }
 .photo-preview img { width: 72px; height: 72px; object-fit: cover; border-radius: 10px; border: 1px solid var(--line); }
 .link { background: none; border: 0; color: var(--bad); font: inherit; cursor: pointer; text-decoration: underline; }
@@ -165,3 +166,9 @@ h3 { font-size: 16px; margin: 18px 0 8px; }
 .act.rejected { color: var(--bad); }
 .act:disabled { opacity: .5; cursor: wait; }
 .privacy-note { font-size: 14px; padding: 8px 12px; border-radius: 10px; background: var(--ok-soft); color: var(--ok); }
+.area-summary { margin: 16px 0; padding: 12px; border: 1px solid var(--line); border-radius: 10px; }
+.area-summary h3 { font-size: 16px; margin: 0 0 6px; }
+.area-summary p { margin: 0 0 8px; font-size: 14px; }
+.area-summary ul { margin: 8px 0 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14px; }
+.area-summary small { color: var(--muted); margin-left: 4px; }
+.area-summary a { color: var(--accent); font-weight: 600; }
