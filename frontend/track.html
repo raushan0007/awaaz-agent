@@ -3,18 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f1947">
   <title>Awaaz – शिकायत का हाल</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Ccircle cx='12' cy='12' r='12' fill='%23d9480f'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Cpath d='M8 6h32a6 6 0 0 1 6 6v18a6 6 0 0 1-6 6H22l-9 8v-8H8a6 6 0 0 1-6-6V12a6 6 0 0 1 6-6Z' fill='%23f0612e'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Mukta:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <header class="top">
-    <a class="brand" href="/">आवाज़ <span>Awaaz</span></a>
-    <p class="tag">अपनी शिकायत का हाल देखें</p>
-  </header>
   <main>
+    <section class="card hero">
+      <span class="eyebrow">शिकायत का हाल</span>
+      <h1>आपकी शिकायत कहाँ तक पहुँची?</h1>
+      <p>शिकायत संख्या डालिए। विभाग जो भी करेगा, उसकी जानकारी यहाँ सरल हिंदी में मिलेगी।</p>
+    </section>
     <section class="card">
-      <form id="lookup" class="lookup">
+      <form id="lookup">
         <label for="cid">शिकायत संख्या</label>
         <div class="row">
           <input id="cid" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="जैसे: 12">
@@ -23,7 +28,7 @@
       </form>
       <p id="status" class="status"></p>
     </section>
-    <section id="result" class="card" hidden></section>
+    <section id="result" class="card ticket" hidden></section>
   </main>
   <script type="module" src="track.js"></script>
 </body>

@@ -73,6 +73,14 @@ def test_voice_sample_endpoint_sorts_good_and_noisy(client, tmp_path):
     assert client.post("/api/voice-samples", files={"audio": ("c.mp3", b"ID3...", "audio/mpeg")}).status_code == 400
 
 
+def test_hosted_copy_keeps_no_voice_samples(monkeypatch):
+    monkeypatch.setattr(config.settings, "samples_dir", None)
+    client = TestClient(main.app)
+    r = client.post("/api/voice-samples", files={"audio": ("a.wav", wav(speech_like()), "audio/wav")})
+    assert r.status_code == 404
+    assert client.get("/api/health").json()["keeps_voice_samples"] is False
+
+
 def test_frontend_is_served(client):
     r = client.get("/")
     assert r.status_code == 200 and "Awaaz" in r.text

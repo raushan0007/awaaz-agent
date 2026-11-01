@@ -70,14 +70,16 @@ class Settings:
     data_dir: Path = field(
         default_factory=lambda: Path(os.environ.get("AWAAZ_DATA_DIR", Path(__file__).resolve().parents[1] / "data"))
     )
-    samples_dir: Path = field(init=False)
+    samples_dir: Path | None = field(init=False)
     budget: Budget = field(init=False)
 
     def __post_init__(self) -> None:
         limit = float(os.environ.get("AWAAZ_DAILY_BUDGET_USD", "3"))
         self.budget = Budget(daily_limit_usd=limit, ledger_dir=self.data_dir)
-        # Voice recordings stay on this machine, outside git.
-        self.samples_dir = Path(os.environ.get("AWAAZ_SAMPLES_DIR", self.data_dir / "voice-samples"))
+        # Voice samples are kept only where a folder is named for them (the author's own machine),
+        # never on a hosted copy where citizens speak.
+        samples = os.environ.get("AWAAZ_SAMPLES_DIR", "")
+        self.samples_dir = Path(samples) if samples else None
 
 
 settings = Settings()

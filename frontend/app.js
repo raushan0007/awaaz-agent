@@ -1,5 +1,9 @@
 import { Recorder } from "./recorder.js";
-import { $, areaHtml, esc, evidenceHtml, STATUS, traceHtml, URGENCY } from "./shared.js";
+import {
+  $, areaHtml, DEPARTMENTS, esc, evidenceHtml, mountChrome, STATUS, stepperHtml, toast, traceHtml, URGENCY,
+} from "./shared.js";
+
+mountChrome("citizen");
 
 const mic = $("mic");
 const meter = $("meter");
@@ -15,17 +19,26 @@ const PROBLEMS = {
   unclear: "आवाज़ शोर से साफ़ अलग नहीं है",
   clipping: "आवाज़ फट रही है — माइक थोड़ा दूर रखें",
 };
+
+// Mirrored bars in the brand gradient; the newest level is on the right.
 function drawMeter() {
   const ctx = meter.getContext("2d");
   const { width, height } = meter;
   ctx.clearRect(0, 0, width, height);
-  ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--accent");
-  const bars = 100;
+  const grad = ctx.createLinearGradient(0, 0, width, 0);
+  grad.addColorStop(0, "#ff8a3d");
+  grad.addColorStop(1, "#e23d4b");
+  ctx.fillStyle = grad;
+  const bars = 64;
   const w = width / bars;
-  levels.slice(-bars).forEach((level, i) => {
-    const h = Math.max(2, Math.min(1, level * 4) * height);
-    ctx.fillRect(i * w + 1, (height - h) / 2, w - 2, h);
-  });
+  const recent = levels.slice(-bars);
+  for (let i = 0; i < bars; i++) {
+    const level = recent[i - (bars - recent.length)] ?? 0;
+    const h = Math.max(4, Math.min(1, level * 4) * height);
+    ctx.beginPath();
+    ctx.roundRect(i * w + 2, (height - h) / 2, w - 4, h, 3);
+    ctx.fill();
+  }
 }
 
 async function postForm(url, form) {
@@ -33,6 +46,12 @@ async function postForm(url, form) {
   const body = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(body.detail || `HTTP ${r.status}`);
   return body;
+}
+
+function setRecording(on) {
+  mic.classList.toggle("recording", on);
+  $("micWrap").classList.toggle("recording", on);
+  mic.setAttribute("aria-label", on ? "रिकॉर्डिंग रोकें" : "रिकॉर्डिंग शुरू करें");
 }
 
 async function startRecording() {
@@ -48,8 +67,7 @@ async function startRecording() {
     $("micStatus").textContent = "माइक नहीं मिला या अनुमति नहीं दी गई: " + err.message;
     return;
   }
-  mic.classList.add("recording");
-  mic.setAttribute("aria-label", "रिकॉर्डिंग रोकें");
+  setRecording(true);
   $("micStatus").textContent = "सुन रहे हैं… बोलकर माइक दोबारा दबाएँ।";
 }
 
@@ -57,7 +75,7 @@ async function stopRecording() {
   if (!recorder) return;
   const rec = recorder;
   recorder = null;
-  mic.classList.remove("recording");
+  setRecording(false);
   mic.disabled = true;
   $("micStatus").textContent = "आवाज़ को टेक्स्ट में बदल रहे हैं…";
   try {
@@ -73,13 +91,13 @@ async function stopRecording() {
     $("micStatus").textContent = transcript
       ? `${seconds.toFixed(1)} सेकंड की आवाज़ टेक्स्ट में बदली। ज़रूरत हो तो सुधार लें।`
       : "कोई शब्द समझ नहीं आए। दोबारा साफ़ बोलिए।";
+    if (transcript) toast("✓ आपकी बात लिख ली गई", "ok");
 
     if ($("keepSample").checked) await keepSample(blob, transcript);
   } catch (err) {
     $("micStatus").textContent = "गड़बड़ी: " + err.message;
   } finally {
     mic.disabled = false;
-    mic.setAttribute("aria-label", "रिकॉर्डिंग शुरू करें");
   }
 }
 
@@ -117,7 +135,7 @@ async function pickPhoto(e) {
     photoBlob = await shrinkPhoto(file);
   } catch {
     photoBlob = null;
-    $("sendStatus").textContent = "यह फ़ोटो खुल नहीं पाई। कोई दूसरी फ़ोटो चुनें।";
+    toast("यह फ़ोटो खुल नहीं पाई। कोई दूसरी फ़ोटो चुनें।", "bad");
     return;
   }
   $("photoThumb").src = URL.createObjectURL(photoBlob);
@@ -134,50 +152,73 @@ function showResult(c) {
   const dept = d.department ? d.department.name_hi : "";
   const el = $("result");
   el.hidden = false;
+  el.className = `card ticket ${c.status}`;
   el.innerHTML = `
-    <h2>${esc(d.title_hi || "शिकायत #" + c.id)}</h2>
-    <div class="badges">
-      <span class="badge ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>
-      ${dept ? `<span class="badge">${esc(dept)}</span>` : ""}
-      ${c.urgency ? `<span class="badge ${esc(c.urgency)}">${esc(URGENCY[c.urgency] || c.urgency)}</span>` : ""}
-      ${c.supporters > 1 ? `<span class="badge">${c.supporters} लोगों ने यही बताया</span>` : ""}
+    <div class="ticket-head">
+      <div><small>${esc(STATUS[c.status] || c.status)}</small><h2>${esc(d.title_hi || "आपकी शिकायत")}</h2></div>
+      <div class="ticket-no"><small>शिकायत संख्या</small><b>#${c.id}</b></div>
     </div>
-    <p class="reply">${esc(d.citizen_reply || (c.errors || []).join(" "))}</p>
-    ${(c.masked || []).length ? `<p class="privacy-note">🔒 आपकी निजी जानकारी (${c.masked.map((k) => HIDDEN[k] || k).join(", ")}) छिपा दी गई है — यह किसी अधिकारी या AI को नहीं दिखेगी।</p>` : ""}
-    ${evidenceHtml(c)}
-    ${d.rejection_reason ? `<p class="status">कारण: ${esc(d.rejection_reason)}</p>` : ""}
-    ${d.formal_letter_hi ? `<details><summary>विभाग को भेजा गया पत्र</summary><div class="letter">${esc(d.formal_letter_hi)}</div></details>` : ""}
-    ${areaHtml(c.area_summary)}
-    ${traceHtml(c.trace)}
-    ${c.status !== "rejected" ? `<a class="track-link" href="/track.html?id=${c.id}">शिकायत संख्या #${c.id} — आगे का हाल यहाँ देखें →</a>` : ""}`;
+    <div class="ticket-body">
+      ${stepperHtml(c.status)}
+      <div class="badges">
+        ${dept ? `<span class="badge dept">🏛️ ${esc(dept)}</span>` : ""}
+        ${c.urgency ? `<span class="badge ${esc(c.urgency)}">${esc(URGENCY[c.urgency] || c.urgency)}</span>` : ""}
+        ${c.area ? `<span class="badge">📍 ${esc(c.area)}</span>` : ""}
+        ${c.supporters > 1 ? `<span class="badge merged">👥 ${c.supporters} लोगों ने यही बताया</span>` : ""}
+      </div>
+      <p class="reply">${esc(d.citizen_reply || (c.errors || []).join(" "))}</p>
+      ${(c.masked || []).length ? `<p class="privacy-note">🔒 आपकी निजी जानकारी (${c.masked.map((k) => HIDDEN[k] || k).join(", ")}) छिपा दी गई है — यह किसी अधिकारी या AI को नहीं दिखेगी।</p>` : ""}
+      ${evidenceHtml(c)}
+      ${d.rejection_reason ? `<p class="status">कारण: ${esc(d.rejection_reason)}</p>` : ""}
+      ${d.formal_letter_hi ? `<details><summary>📄 विभाग को भेजा गया पत्र</summary><div class="letter">${esc(d.formal_letter_hi)}</div></details>` : ""}
+      ${traceHtml(c.trace)}
+      ${areaHtml(c.area_summary)}
+      ${c.status !== "rejected" ? `<a class="track-link" href="/track.html?id=${c.id}"><span>शिकायत #${c.id} का आगे का हाल देखें</span><span>→</span></a>` : ""}
+    </div>`;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 async function send() {
   const text = $("text").value.trim();
   if (text.length < 5) {
-    $("sendStatus").textContent = "पहले अपनी समस्या लिखिए या बोलिए।";
+    toast("पहले अपनी समस्या लिखिए या बोलिए।", "bad");
+    $("text").focus();
     return;
   }
   const btn = $("send");
   btn.disabled = true;
-  $("sendStatus").textContent = photoBlob
+  $("thinking").hidden = false;
+  $("thinkingText").textContent = photoBlob
     ? "AI शिकायत और फ़ोटो जाँच रहा है… (20–40 सेकंड)"
     : "AI शिकायत जाँच रहा है… (10–20 सेकंड)";
   try {
     const form = new FormData();
     form.append("text", text);
     form.append("area", $("area").value.trim());
-    form.append("town", $("town").value);
+    form.append("town", document.querySelector('input[name="town"]:checked').value);
     if (photoBlob) form.append("photo", photoBlob, "photo.jpg");
-    showResult(await postForm("/api/complaints", form));
-    $("sendStatus").textContent = "";
+    const c = await postForm("/api/complaints", form);
+    showResult(c);
+    toast(c.status === "rejected" ? "शिकायत स्वीकार नहीं हुई" : `✓ शिकायत #${c.id} दर्ज हुई`, c.status === "rejected" ? "bad" : "ok");
   } catch (err) {
-    $("sendStatus").textContent = "गड़बड़ी: " + err.message;
+    toast("गड़बड़ी: " + err.message, "bad");
   } finally {
     btn.disabled = false;
+    $("thinking").hidden = true;
   }
 }
+
+// Department ribbon, doubled so the loop is seamless.
+const chips = Object.values(DEPARTMENTS).map((d) => `<span>${esc(d)}</span>`).join("");
+$("depts").innerHTML = chips + chips;
+
+// Samples are a local-only aid for recording the demo voice; a hosted copy keeps none.
+fetch("/api/health").then((r) => r.json()).then((h) => {
+  if (!h.keeps_voice_samples) {
+    $("keepSample").checked = false;
+    $("keepSample").closest("label").hidden = true;
+  }
+}).catch(() => {});
 
 mic.addEventListener("click", () => (recorder ? stopRecording() : startRecording()));
 $("send").addEventListener("click", send);

@@ -3,6 +3,8 @@
 Built for the **Meta Global AI Developer Hackathon** (Oct 27 – Nov 4, 2026), Indie track.
 
 > **All code in this repository was written during the hackathon week.** Nothing was carried over from earlier projects; the git history starts on Oct 27.
+> Before the event I had sketched the idea as a small mock-up; the Nov 1 redesign follows that sketch's look
+> (warm colours, Baloo 2 / Mukta type, pill navigation), but its pages, styles and scripts were written new here.
 
 In small-town India a broken road, a dry tap or a live wire hanging over a roof usually goes unreported: the
 forms are in English, the offices are far, and nobody knows which department owns the problem. **Awaaz**
@@ -157,6 +159,7 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 | Oct 30 | PII masking, demo data through the live API, better duplicate merging, hotspots |
 | Oct 31 | Docker / Render deployment, demo database, this README |
 | Nov 1 | Second town (Forbesganj), town-scoped duplicate search, area overview, real photo reports |
+| Nov 1 | Redesigned UI: ticket card with progress stepper, phone bottom nav, officer donut chart and filters; voice samples kept only on the author's machine |
 
 ## Known limits
 

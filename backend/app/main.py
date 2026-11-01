@@ -83,6 +83,7 @@ def health() -> dict:
         "meta_key": bool(settings.meta_api_key),
         "baseten_key": bool(settings.baseten_api_key),
         "misnamed_secrets": misnamed_secrets(),
+        "keeps_voice_samples": settings.samples_dir is not None,
         "spent_today_usd": round(settings.budget.spent_today(), 4),
         "daily_limit_usd": settings.budget.daily_limit_usd,
     }
@@ -105,6 +106,8 @@ def _check_wav(wav: bytes) -> None:
 @app.post("/api/voice-samples")
 async def voice_sample(audio: UploadFile = File(...), transcript: str = Form("")) -> dict:
     """Keep a recording on this machine, sorted into good/ or noisy/ by background noise."""
+    if settings.samples_dir is None:
+        raise HTTPException(404, "Voice samples are not kept on this server.")
     wav = await audio.read()
     if len(wav) > MAX_AUDIO_BYTES:
         raise HTTPException(413, "Audio must be under 32 MB.")
