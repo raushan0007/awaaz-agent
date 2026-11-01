@@ -11,9 +11,9 @@
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;700;800&family=Mukta:wght@400;500;600;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
-<body>
+<body class="home">
   <main>
-    <section class="card hero" id="hero">
+    <section class="card hero home-hero" id="hero">
       <span class="kicker"><i></i>भारत के हर नागरिक की आवाज़ · Meta AI</span>
       <h1>आपकी आवाज़,<br><span class="hl">सही दफ़्तर तक।</span></h1>
       <p>समस्या बोलिए, लिखिए या फ़ोटो भेजिए — AI उसे सही विभाग तक पहुँचाता है, और उसका पूरा हाल सबके सामने रहता है।</p>
@@ -59,13 +59,15 @@
           <div class="lg"><span><i style="background:#ff9a2e"></i>आईं</span><span><i style="background:#46dc5f"></i>हल हुईं</span></div>
           <div id="homeTrend"></div></div>
       </div>
-      <div class="card">
-        <h3>किस तरह की समस्या — कितनी शिकायतें, कितने लोगों ने बताईं</h3>
-        <div class="cat-bars" id="catBars"></div>
-      </div>
-      <div class="card" id="mostCard" hidden>
-        <h3>👥 सबसे ज़्यादा लोगों ने बताया</h3>
-        <div class="most" id="mostList"></div>
+      <div class="dash-split">
+        <div class="card">
+          <h3>किस तरह की समस्या — कितनी शिकायतें, कितने लोगों ने बताईं</h3>
+          <div class="cat-bars" id="catBars"></div>
+        </div>
+        <div class="card" id="mostCard" hidden>
+          <h3>👥 सबसे ज़्यादा लोगों ने बताया</h3>
+          <div class="most" id="mostList"></div>
+        </div>
       </div>
     </section>
 
