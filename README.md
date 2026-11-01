@@ -88,6 +88,10 @@ A failed check or a Baseten outage falls back to a fixed Hindi template, so the 
 
 ## Privacy
 
+- A mobile number is optional. Only a salted SHA-256 fingerprint is stored: it finds the citizen's own
+  tickets again and lifts the report's information level (★ to ★★★★ with mobile, GPS pin and photo); nobody,
+  officers included, ever sees the number. Reports with less information are accepted all the same.
+
 - The phone's exact position is taken only when the citizen taps 📍. It is stored with the complaint so
   the officer can open it on a map (with its Plus Code and GPS accuracy) and so reports pinned within 200 m
   are matched as one problem; no public page or API ever shows it. To name the town and street, the
@@ -135,6 +139,7 @@ and a `demo.officer` login is created with that password.
 | `POST /api/transcribe` | WAV (mono, 16-bit, 16/24 kHz) → transcript |
 | `POST /api/complaints` | `text`, `town` (any town or district), optional `area`, `photo` → the agent's decision, tool trace and area overview |
 | `GET /api/places` | every town reports have come from, busiest first |
+| `POST /api/my-complaints` | `{mobile}` → that citizen's own tickets (matched by fingerprint, never stored in clear) |
 | `GET /api/complaints/{id}/track` | the citizen's view: status and Hindi updates |
 | `GET /api/public/stats` | home-page numbers: counts, per-department progress, latest problems, just fixed (no report text) |
 | `GET /api/officer/insights?days=` | the officer's KPIs, daily trend, department and area rankings, attention lists |
@@ -154,7 +159,7 @@ and a `demo.officer` login is created with that password.
 python -m pytest -q backend/tests
 ```
 
-68 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
+75 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
 photo metadata stripping, officer scoping and status rules, the open-model fallback, and the demo bootstrap.
 `python scripts/smoke_test.py sample.wav photo.jpg` calls every live model once;
 `python scripts/agent_demo.py` runs the agent live on a new report, a duplicate and spam.
@@ -171,6 +176,7 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 | Oct 31 | Docker / Render deployment, demo database, this README |
 | Nov 1 | Any town in India (typed or from the phone's location), town-scoped duplicate search, area overview, real photo reports from Forbesganj |
 | Nov 1 | Redesigned UI: ticket card with progress stepper, phone bottom nav, officer donut chart and filters; voice samples kept only on the author's machine; officers attach a photo of the work |
+| Nov 1 | Ticket popup (copy, WhatsApp, track), "my complaints" by phone or mobile, information level, public department reply times, every step's timing and a public no-reply warning on tracking |
 | Nov 1 | Night-navy design with the turning Ashoka chakra, live numbers and AI replay on the home page; officer analysis (trend, rankings, attention lists, printable report) |
 
 ## Known limits
