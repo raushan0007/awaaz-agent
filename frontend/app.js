@@ -1,6 +1,7 @@
 import { Recorder } from "./recorder.js";
 import {
-  $, areaHtml, DEPARTMENTS, esc, evidenceHtml, mountChrome, STATUS, stepperHtml, toast, traceHtml, URGENCY,
+  $, areaHtml, DEPARTMENTS, esc, evidenceHtml, mountChrome, shrinkPhoto, STATUS, stepperHtml, toast, traceHtml,
+  URGENCY,
 } from "./shared.js";
 
 mountChrome("citizen");
@@ -10,7 +11,6 @@ const meter = $("meter");
 const levels = [];
 let recorder = null;
 let photoBlob = null;
-const MAX_PHOTO_SIDE = 1600;
 const HIDDEN = { mobile: "मोबाइल नंबर", aadhaar: "आधार नंबर", email: "ईमेल", pan: "PAN" };
 
 const PROBLEMS = {
@@ -113,18 +113,6 @@ async function keepSample(blob, transcript) {
   box.textContent = q.good
     ? `✓ साफ़ आवाज़ — वीडियो के लिए अच्छा सैंपल${numbers}। सेव: ${q.saved_as}`
     : `⚠ ${q.problems.map((p) => PROBLEMS[p] || p).join(", ")}${numbers}। सिर्फ़ टेस्ट के लिए सेव: ${q.saved_as}`;
-}
-
-// Re-encoding through a canvas shrinks phone photos (5 MB -> ~300 KB) and drops EXIF/GPS on the device.
-async function shrinkPhoto(file) {
-  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
-  const scale = Math.min(1, MAX_PHOTO_SIDE / Math.max(bitmap.width, bitmap.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(bitmap.width * scale);
-  canvas.height = Math.round(bitmap.height * scale);
-  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-  bitmap.close();
-  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
 }
 
 async function pickPhoto(e) {

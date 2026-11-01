@@ -158,3 +158,52 @@ def test_pages_are_served(client):
         r = client.get(page)
         assert r.status_code == 200, page
         assert r.headers["cache-control"] == "no-cache"  # a redeploy must not leave stale scripts
+
+
+def test_officer_adds_a_work_photo_the_citizen_sees(client, store, tmp_path, monkeypatch):
+    from backend.tests.test_photos import jpeg
+
+    monkeypatch.setattr(main, "photos_dir", lambda: tmp_path / "photos")
+    cid = add(store)
+    h = headers(client, "roads.officer", "road-pass")
+    r = client.post(f"/api/officer/complaints/{cid}/status", headers=h, json={"status": "in_progress"}).json()
+    uid = r["update_id"]
+    photo = {"photo": ("work.jpg", jpeg(), "image/jpeg")}
+
+    assert client.post(f"/api/officer/updates/{uid}/photo", files=photo).status_code == 401
+    other = headers(client, "district.officer", "district-pass")
+    assert client.post(f"/api/officer/updates/{uid}/photo", headers=other, files=photo).status_code == 403
+
+    added = client.post(f"/api/officer/updates/{uid}/photo", headers=h, files=photo)
+    assert added.status_code == 200 and added.json()["photo"]["width"] == 640
+    assert client.post(f"/api/officer/updates/{uid}/photo", headers=h, files=photo).status_code == 409
+
+    track = client.get(f"/api/complaints/{cid}/track").json()
+    assert track["updates"][0]["photo"]["file"] == f"u{uid}.jpg"
+    served = client.get(f"/api/updates/{uid}/photo").content
+    assert b"GPS" not in served and b"Exif" not in served  # metadata stripped like citizen photos
+    assert client.get("/api/updates/999/photo").status_code == 404
+
+
+def test_closing_a_complaint_cannot_carry_a_photo(client, store, tmp_path, monkeypatch):
+    from backend.tests.test_photos import jpeg
+
+    monkeypatch.setattr(main, "photos_dir", lambda: tmp_path / "photos")
+    h = headers(client, "roads.officer", "road-pass")
+    uid = client.post(f"/api/officer/complaints/{add(store)}/status", headers=h,
+                      json={"status": "rejected", "note": "duplicate of a fixed road"}).json()["update_id"]
+    r = client.post(f"/api/officer/updates/{uid}/photo", headers=h, files={"photo": ("w.jpg", jpeg(), "image/jpeg")})
+    assert r.status_code == 409
+
+
+def test_old_databases_gain_the_update_photo_column(tmp_path):
+    import sqlite3
+
+    db = sqlite3.connect(tmp_path / "old.db")
+    db.executescript("CREATE TABLE updates (id INTEGER PRIMARY KEY AUTOINCREMENT, complaint_id INTEGER NOT NULL,"
+                     " created_at TEXT NOT NULL, status TEXT NOT NULL, note TEXT NOT NULL DEFAULT '',"
+                     " message_hi TEXT NOT NULL DEFAULT '', officer TEXT NOT NULL DEFAULT '')")
+    db.close()
+    s = Store(tmp_path / "old.db")
+    assert "photo" in {r["name"] for r in s._db.execute("PRAGMA table_info(updates)")}
+    s.close()

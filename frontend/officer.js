@@ -1,5 +1,5 @@
 import {
-  $, DEPARTMENTS, esc, evidenceHtml, formatTime, mountChrome, STATUS, toast, traceHtml, URGENCY,
+  $, DEPARTMENTS, esc, evidenceHtml, formatTime, mountChrome, shrinkPhoto, STATUS, toast, traceHtml, URGENCY,
 } from "./shared.js";
 
 mountChrome("officer");
@@ -20,6 +20,8 @@ const SLICES = [
   ["needs_review", "जाँच बाकी", "#6366f1"],
   ["rejected", "बंद", "#9ca3af"],
 ];
+// Only work started or finished can carry a photo of the work (the server checks the same).
+const PROOF_STATES = ["in_progress", "resolved"];
 const REFRESH_MS = 30000;
 
 let token = null;
@@ -133,6 +135,9 @@ function actionsHtml(c) {
     ${routing}
     <label>नोट (नागरिक को सरल हिंदी में बताया जाएगा)</label>
     <textarea data-role="note" rows="2" maxlength="500" placeholder="जैसे: JE ne site dekh li, kal se kaam shuru"></textarea>
+    ${actions.some(([s]) => PROOF_STATES.includes(s)) ? `<div class="proof-pick">
+      <label class="pick-btn">📷 काम की फ़ोटो जोड़ें<input type="file" accept="image/*" data-role="proof" hidden></label>
+      <span class="hint" data-role="proofName">ज़रूरी नहीं — नागरिक को काम होता दिखेगा</span></div>` : ""}
     <div class="action-buttons">${actions.map(([status, label]) =>
       `<button type="button" class="act ${status}" data-status="${status}">${label}</button>`).join("")}</div>
     <p class="status" data-role="msg"></p>
@@ -142,7 +147,8 @@ function actionsHtml(c) {
 function itemHtml(c) {
   const d = c.decision || {};
   const updates = (c.updates || []).map((u) =>
-    `<li><time>${esc(formatTime(u.created_at))}</time> <b>${esc(STATUS[u.status] || u.status)}</b> — ${esc(u.message_hi)}</li>`).join("");
+    `<li><time>${esc(formatTime(u.created_at))}</time> <b>${esc(STATUS[u.status] || u.status)}</b> — ${esc(u.message_hi)}
+      ${u.photo ? `<a href="/api/updates/${u.id}/photo" target="_blank" rel="noopener">📷 फ़ोटो</a>` : ""}</li>`).join("");
   return `<article class="card item ${esc(c.urgency || "")}" data-id="${c.id}">
     <div class="item-head">
       <h3>#${c.id} ${esc(d.title_hi || c.text.slice(0, 80))}</h3>
@@ -187,6 +193,7 @@ function renderQueue() {
 async function refresh() {
   // Never re-render under an officer who is typing a note.
   if (document.activeElement && document.activeElement.closest(".actions")) return;
+  if ([...document.querySelectorAll('[data-role="proof"]')].some((f) => f.files.length)) return;
   const [stats, items] = await Promise.all([api("/api/officer/stats"), api("/api/officer/queue")]);
   renderStats(stats);
   queue = items;
@@ -208,12 +215,31 @@ async function act(button) {
       body: JSON.stringify({ status: button.dataset.status, note, category }),
     });
     msg.textContent = `✓ नागरिक को भेजा: "${r.message_hi}"`;
+    const file = box.querySelector('[data-role="proof"]')?.files[0];
+    if (file && PROOF_STATES.includes(button.dataset.status)) {
+      msg.textContent += " · फ़ोटो जोड़ी जा रही है…";
+      await uploadProof(r.update_id, file);
+      msg.textContent = msg.textContent.replace(" · फ़ोटो जोड़ी जा रही है…", " · 📷 फ़ोटो जुड़ गई");
+    }
     toast(`✓ #${item.dataset.id}: नागरिक को संदेश भेजा गया`, "ok");
     setTimeout(() => { document.activeElement?.blur(); refresh(); }, 2500);
   } catch (err) {
     msg.textContent = "नहीं हुआ: " + err.message;
     toast("नहीं हुआ: " + err.message, "bad");
     box.querySelectorAll("button").forEach((b) => (b.disabled = false));
+  }
+}
+
+// Shrunk and stripped of EXIF/GPS on the device, exactly like a citizen's photo.
+async function uploadProof(updateId, file) {
+  const form = new FormData();
+  form.append("photo", await shrinkPhoto(file), "work.jpg");
+  const r = await fetch(`/api/officer/updates/${updateId}/photo`, {
+    method: "POST", body: form, headers: { Authorization: `Bearer ${token || ""}` },
+  });
+  if (!r.ok) {
+    const body = await r.json().catch(() => ({}));
+    toast("फ़ोटो नहीं जुड़ी: " + (body.detail || r.status), "bad");
   }
 }
 
@@ -242,6 +268,11 @@ $("filters").addEventListener("click", (e) => {
   renderQueue();
 });
 $("search").addEventListener("input", renderQueue);
+$("queue").addEventListener("change", (e) => {
+  if (e.target.dataset.role !== "proof") return;
+  const name = e.target.closest(".proof-pick").querySelector('[data-role="proofName"]');
+  name.textContent = e.target.files[0] ? `✓ ${e.target.files[0].name}` : "";
+});
 setInterval(() => { if (token && !$("dash").hidden) refresh().catch(() => {}); }, REFRESH_MS);
 
 if (token) {

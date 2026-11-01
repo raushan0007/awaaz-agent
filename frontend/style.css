@@ -416,3 +416,9 @@ summary { cursor: pointer; font-weight: 700; color: var(--text-2); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+/* the officer's photo of the work, on an update */
+.proof-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.proof-pick .pick-btn { padding: 8px 14px; font-size: 15px; }
+.proof { margin: 10px 0 0; }
+.proof img { width: 100%; max-width: 420px; display: block; border-radius: 14px; border: 1px solid var(--line); }
+.proof figcaption { font-size: 14px; color: var(--ok); font-weight: 600; margin-top: 6px; }

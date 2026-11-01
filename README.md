@@ -17,7 +17,7 @@ checks the photo, merges it with reports of the same problem, and keeps the citi
 | Speaks or types the problem, adds a photo | Sees a queue sorted by danger, then by how many people reported it |
 | Gets the department, urgency and a tracking number in seconds | Sees why: the agent's tool trace, the photo with SAM's mask, a ready Hindi letter |
 | Phone and Aadhaar numbers are hidden before anyone sees the report | Hotspots show where the same problems keep coming back |
-| Reads updates in simple Hindi, written from the officer's own note | Writes a two-word note; the citizen gets a proper Hindi update |
+| Reads updates in simple Hindi, written from the officer's own note | Writes a two-word note and can add a photo of the work; the citizen gets a proper Hindi update |
 | Sees the whole picture of their place: every problem reported there and where each stands | |
 
 ## How it works
@@ -133,6 +133,7 @@ and a `demo.officer` login is created with that password.
 | `POST /api/officer/login` | officer login → bearer token |
 | `GET /api/officer/queue`, `/stats` | the department's work queue and hotspots |
 | `POST /api/officer/complaints/{id}/status` | move a complaint; returns the update sent to the citizen |
+| `POST /api/officer/updates/{id}/photo` | the officer's photo of the work (work started or done only; metadata stripped) |
 | `POST /api/evidence` | photo + concept → SAM boxes and masks |
 | `POST /api/voice-samples` | local only: keeps a recording, scored for background noise |
 | `GET /api/health` | keys present, spend today |
@@ -143,7 +144,7 @@ and a `demo.officer` login is created with that password.
 python -m pytest -q backend/tests
 ```
 
-62 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
+66 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
 photo metadata stripping, officer scoping and status rules, the open-model fallback, and the demo bootstrap.
 `python scripts/smoke_test.py sample.wav photo.jpg` calls every live model once;
 `python scripts/agent_demo.py` runs the agent live on a new report, a duplicate and spam.
@@ -159,7 +160,7 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 | Oct 30 | PII masking, demo data through the live API, better duplicate merging, hotspots |
 | Oct 31 | Docker / Render deployment, demo database, this README |
 | Nov 1 | Second town (Forbesganj), town-scoped duplicate search, area overview, real photo reports |
-| Nov 1 | Redesigned UI: ticket card with progress stepper, phone bottom nav, officer donut chart and filters; voice samples kept only on the author's machine |
+| Nov 1 | Redesigned UI: ticket card with progress stepper, phone bottom nav, officer donut chart and filters; voice samples kept only on the author's machine; officers attach a photo of the work |
 
 ## Known limits
 

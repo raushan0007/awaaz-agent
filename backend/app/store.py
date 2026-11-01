@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS updates (
     status TEXT NOT NULL,
     note TEXT NOT NULL DEFAULT '',
     message_hi TEXT NOT NULL DEFAULT '',
-    officer TEXT NOT NULL DEFAULT ''
+    officer TEXT NOT NULL DEFAULT '',
+    photo TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_updates ON updates(complaint_id);
 CREATE TABLE IF NOT EXISTS officers (
@@ -52,7 +53,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 """
 # Columns added after the first release, so databases made earlier keep working.
-LATER_COLUMNS = {"photo": "TEXT", "evidence": "TEXT", "masked": "TEXT"}
+LATER_COLUMNS = {
+    "complaints": {"photo": "TEXT", "evidence": "TEXT", "masked": "TEXT"},
+    "updates": {"photo": "TEXT"},  # the officer's photo of the work, if any
+}
 JSON_COLUMNS = ("decision", "photo", "evidence", "masked")
 
 # open: routed to a department; merged: a duplicate of an open complaint; rejected: failed
@@ -92,10 +96,11 @@ class Store:
         self._db = sqlite3.connect(str(path), check_same_thread=False)
         self._db.row_factory = sqlite3.Row
         self._db.executescript(SCHEMA)
-        have = {r["name"] for r in self._db.execute("PRAGMA table_info(complaints)")}
-        for name, kind in LATER_COLUMNS.items():
-            if name not in have:
-                self._db.execute(f"ALTER TABLE complaints ADD COLUMN {name} {kind}")
+        for table, columns in LATER_COLUMNS.items():
+            have = {r["name"] for r in self._db.execute(f"PRAGMA table_info({table})")}
+            for name, kind in columns.items():
+                if name not in have:
+                    self._db.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
 
     def add(self, *, text: str, area: str, has_photo: bool, status: str, category: str | None,
             urgency: str | None, duplicate_of: int | None, decision: dict | None, trace: list,
@@ -187,21 +192,30 @@ class Store:
 
     # --- status updates -------------------------------------------------------------------------
 
-    def add_update(self, complaint_id: int, status: str, note: str, message_hi: str, officer: str) -> None:
+    def add_update(self, complaint_id: int, status: str, note: str, message_hi: str, officer: str) -> int:
         with self._lock, self._db:
-            self._db.execute(
+            cur = self._db.execute(
                 "INSERT INTO updates (complaint_id, created_at, status, note, message_hi, officer)"
                 " VALUES (?,?,?,?,?,?)",
                 (complaint_id, _now(), status, note, message_hi, officer),
             )
             self._db.execute("UPDATE complaints SET status = ? WHERE id = ?", (status, complaint_id))
+        return cur.lastrowid
 
     def updates(self, complaint_id: int) -> list[dict[str, Any]]:
         rows = self._db.execute(
-            "SELECT created_at, status, message_hi FROM updates WHERE complaint_id = ? ORDER BY id",
+            "SELECT id, created_at, status, message_hi, photo FROM updates WHERE complaint_id = ? ORDER BY id",
             (complaint_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        return [{**dict(r), "photo": json.loads(r["photo"]) if r["photo"] else None} for r in rows]
+
+    def update(self, update_id: int) -> dict[str, Any] | None:
+        row = self._db.execute("SELECT * FROM updates WHERE id = ?", (update_id,)).fetchone()
+        return {**dict(row), "photo": json.loads(row["photo"]) if row["photo"] else None} if row else None
+
+    def set_update_photo(self, update_id: int, photo: dict) -> None:
+        with self._lock, self._db:
+            self._db.execute("UPDATE updates SET photo = ? WHERE id = ?", (_dump(photo), update_id))
 
     # --- officer views ----------------------------------------------------------------------------
 

@@ -34,6 +34,20 @@ export function formatTime(iso) {
   return new Date(iso).toLocaleString("hi-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
+const MAX_PHOTO_SIDE = 1600;
+
+// Re-encoding through a canvas shrinks phone photos (5 MB -> ~300 KB) and drops EXIF/GPS on the device.
+export async function shrinkPhoto(file) {
+  const bitmap = await createImageBitmap(file, { imageOrientation: "from-image" });
+  const scale = Math.min(1, MAX_PHOTO_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(bitmap.width * scale);
+  canvas.height = Math.round(bitmap.height * scale);
+  canvas.getContext("2d").drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  bitmap.close();
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.85));
+}
+
 // --- page chrome --------------------------------------------------------------------------------
 
 const LOGO = `<svg viewBox="0 0 48 48" aria-hidden="true">

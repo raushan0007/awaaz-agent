@@ -330,8 +330,51 @@ def officer_set_status(complaint_id: int, body: StatusBody, officer: dict = Depe
 
     note = body.note.strip()
     message, source = status_writer.write_message(c, body.status, note)
-    store.add_update(complaint_id, body.status, note, message, officer["username"])
-    return {"id": complaint_id, "status": body.status, "message_hi": message, "written_by": source}
+    update_id = store.add_update(complaint_id, body.status, note, message, officer["username"])
+    return {"id": complaint_id, "update_id": update_id, "status": body.status, "message_hi": message,
+            "written_by": source}
+
+
+PROOF_STATES = ("in_progress", "resolved")
+
+
+@app.post("/api/officer/updates/{update_id}/photo")
+async def officer_update_photo(
+    update_id: int, photo: UploadFile = File(...), officer: dict = Depends(current_officer)
+) -> dict:
+    """A photo of the work, so the citizen sees it being done instead of only being told."""
+    store = get_store()
+    u = store.update(update_id)
+    if u is None:
+        raise HTTPException(404, "No such update.")
+    if u["officer"] != officer["username"] or not auth.can_act_on(officer, store.get(u["complaint_id"])):
+        raise HTTPException(403, "Only the officer who wrote this update can add its photo.")
+    if u["status"] not in PROOF_STATES:
+        raise HTTPException(409, "Only work started or finished can carry a photo.")
+    if u["photo"]:
+        raise HTTPException(409, "This update already has a photo.")
+    raw = await photo.read()
+    if len(raw) > MAX_IMAGE_BYTES:
+        raise HTTPException(413, "Photo must be under 10 MB.")
+    mime = photo.content_type or "image/jpeg"
+    try:
+        data, width, height = clean_photo(raw, mime)
+    except PhotoError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    name = f"u{update_id}.{'png' if mime == 'image/png' else 'jpg'}"
+    photos_dir().mkdir(parents=True, exist_ok=True)
+    (photos_dir() / name).write_bytes(data)
+    info = {"file": name, "width": width, "height": height}
+    store.set_update_photo(update_id, info)
+    return {"update_id": update_id, "photo": info}
+
+
+@app.get("/api/updates/{update_id}/photo")
+def update_photo(update_id: int) -> FileResponse:
+    u = get_store().update(update_id)
+    if u is None or not u["photo"]:
+        raise HTTPException(404, "No photo for this update.")
+    return FileResponse(photos_dir() / u["photo"]["file"])
 
 
 # Last, so the /api routes above win over the static files.

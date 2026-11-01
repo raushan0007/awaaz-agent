@@ -16,7 +16,8 @@ async function show(id) {
 
   const updates = t.updates.length
     ? `<ul class="timeline">${t.updates.slice().reverse().map((u) =>
-        `<li><time>${esc(formatTime(u.created_at))}</time><span class="badge ${esc(u.status)}">${esc(STATUS[u.status] || u.status)}</span><p>${esc(u.message_hi)}</p></li>`).join("")}</ul>`
+        `<li><time>${esc(formatTime(u.created_at))}</time><span class="badge ${esc(u.status)}">${esc(STATUS[u.status] || u.status)}</span><p>${esc(u.message_hi)}</p>
+          ${u.photo ? `<figure class="proof"><img src="/api/updates/${u.id}/photo" alt="विभाग की भेजी काम की फ़ोटो" loading="lazy"><figcaption>📷 विभाग ने काम की फ़ोटो भेजी</figcaption></figure>` : ""}</li>`).join("")}</ul>`
     : `<p class="status">अभी विभाग की ओर से कोई नई जानकारी नहीं है।</p>`;
 
   const el = $("result");

@@ -33,7 +33,8 @@ def main() -> None:
     target.execute("VACUUM")
     counts = {t: target.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
               for t in ("complaints", "updates", "officers", "sessions")}
-    files = [json.loads(p)["file"] for (p,) in target.execute("SELECT photo FROM complaints WHERE photo IS NOT NULL")]
+    files = [json.loads(p)["file"] for table in ("complaints", "updates")
+             for (p,) in target.execute(f"SELECT photo FROM {table} WHERE photo IS NOT NULL")]
     target.close()
     shutil.rmtree(PHOTOS, ignore_errors=True)
     PHOTOS.mkdir()
