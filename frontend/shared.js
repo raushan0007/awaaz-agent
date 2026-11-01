@@ -51,11 +51,11 @@ export async function shrinkPhoto(file) {
 // --- page chrome --------------------------------------------------------------------------------
 
 const LOGO = `<svg viewBox="0 0 48 48" aria-hidden="true">
-  <defs><clipPath id="tile"><rect width="48" height="48" rx="12"/></clipPath></defs>
-  <g clip-path="url(#tile)"><rect width="48" height="16" fill="#ff9933"/><rect y="16" width="48" height="16" fill="#ffffff"/><rect y="32" width="48" height="16" fill="#138808"/></g>
-  <g stroke="#0a2a8a" fill="none"><circle cx="18" cy="24" r="7" stroke-width="1.8"/><g stroke-width=".7"><line x1="18" y1="24" x2="24.20" y2="24.00"/><line x1="18" y1="24" x2="23.99" y2="25.60"/><line x1="18" y1="24" x2="23.37" y2="27.10"/><line x1="18" y1="24" x2="22.38" y2="28.38"/><line x1="18" y1="24" x2="21.10" y2="29.37"/><line x1="18" y1="24" x2="19.60" y2="29.99"/><line x1="18" y1="24" x2="18.00" y2="30.20"/><line x1="18" y1="24" x2="16.40" y2="29.99"/><line x1="18" y1="24" x2="14.90" y2="29.37"/><line x1="18" y1="24" x2="13.62" y2="28.38"/><line x1="18" y1="24" x2="12.63" y2="27.10"/><line x1="18" y1="24" x2="12.01" y2="25.60"/><line x1="18" y1="24" x2="11.80" y2="24.00"/><line x1="18" y1="24" x2="12.01" y2="22.40"/><line x1="18" y1="24" x2="12.63" y2="20.90"/><line x1="18" y1="24" x2="13.62" y2="19.62"/><line x1="18" y1="24" x2="14.90" y2="18.63"/><line x1="18" y1="24" x2="16.40" y2="18.01"/><line x1="18" y1="24" x2="18.00" y2="17.80"/><line x1="18" y1="24" x2="19.60" y2="18.01"/><line x1="18" y1="24" x2="21.10" y2="18.63"/><line x1="18" y1="24" x2="22.38" y2="19.62"/><line x1="18" y1="24" x2="23.37" y2="20.90"/><line x1="18" y1="24" x2="23.99" y2="22.40"/></g>
-  <path d="M29 19.5a6.5 6.5 0 0 1 0 9M33 16a11.5 11.5 0 0 1 0 16" stroke-width="2.4" stroke-linecap="round"/></g>
-  <circle cx="18" cy="24" r="1.6" fill="#0a2a8a"/></svg>`;
+  <rect width="48" height="48" rx="13" fill="#fff" stroke="#e6e1d6"/>
+  <g stroke="#0a2a8a" fill="none"><circle cx="24" cy="24" r="9.5" stroke-width="2.2"/><g stroke-width="0.8"><line x1="24" y1="24" x2="33.50" y2="24.00"/><line x1="24" y1="24" x2="33.18" y2="26.46"/><line x1="24" y1="24" x2="32.23" y2="28.75"/><line x1="24" y1="24" x2="30.72" y2="30.72"/><line x1="24" y1="24" x2="28.75" y2="32.23"/><line x1="24" y1="24" x2="26.46" y2="33.18"/><line x1="24" y1="24" x2="24.00" y2="33.50"/><line x1="24" y1="24" x2="21.54" y2="33.18"/><line x1="24" y1="24" x2="19.25" y2="32.23"/><line x1="24" y1="24" x2="17.28" y2="30.72"/><line x1="24" y1="24" x2="15.77" y2="28.75"/><line x1="24" y1="24" x2="14.82" y2="26.46"/><line x1="24" y1="24" x2="14.50" y2="24.00"/><line x1="24" y1="24" x2="14.82" y2="21.54"/><line x1="24" y1="24" x2="15.77" y2="19.25"/><line x1="24" y1="24" x2="17.28" y2="17.28"/><line x1="24" y1="24" x2="19.25" y2="15.77"/><line x1="24" y1="24" x2="21.54" y2="14.82"/><line x1="24" y1="24" x2="24.00" y2="14.50"/><line x1="24" y1="24" x2="26.46" y2="14.82"/><line x1="24" y1="24" x2="28.75" y2="15.77"/><line x1="24" y1="24" x2="30.72" y2="17.28"/><line x1="24" y1="24" x2="32.23" y2="19.25"/><line x1="24" y1="24" x2="33.18" y2="21.54"/></g></g><circle cx="24" cy="24" r="2.2" fill="#0a2a8a"/>
+  <g fill="none" stroke-linecap="round" stroke-width="2.6">
+    <path d="M10 18a10 10 0 0 0 0 12" stroke="#ff9933"/><path d="M5.5 14.5a15 15 0 0 0 0 19" stroke="#ff9933"/>
+    <path d="M38 18a10 10 0 0 1 0 12" stroke="#138808"/><path d="M42.5 14.5a15 15 0 0 1 0 19" stroke="#138808"/></g></svg>`;
 
 const PAGES = [
   ["citizen", "/", "🎙️", "शिकायत करें"],
@@ -66,10 +66,10 @@ const PAGES = [
 const links = (page, withIcons) => PAGES.map(([key, href, icon, label]) =>
   `<a href="${href}"${key === page ? ' aria-current="page"' : ""}>${withIcons ? `<span>${icon}</span>` : ""}${label}</a>`).join("");
 
-/** Flag strip, sticky header with page pills, footer, phone bottom nav and the toast shelf. */
+/** Saffron-to-green top line, sticky header with page pills, footer, phone bottom nav and the toast shelf. */
 export function mountChrome(page) {
   document.body.insertAdjacentHTML("afterbegin", `
-    <div class="flag" aria-hidden="true"><i></i><i></i><i></i></div>
+    <div class="topline" aria-hidden="true"></div>
     <header class="top"><div class="top-in">
       <a class="brand" href="/">${LOGO}<span><b>आवाज़</b><small>Awaaz · सुपौल · फारबिसगंज</small></span></a>
       <div id="headerExtra"></div>

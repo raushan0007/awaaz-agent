@@ -25,6 +25,7 @@
   --info: #2563eb;
   --info-soft: #eaf1ff;
   --night: #0a1546;
+  --tri-line: linear-gradient(90deg, #ff9933, #f5c26b 35%, #6b8fd6 50%, #5cb85c 65%, #138808);
   --glow: rgba(240, 124, 0, .35);
   --shadow: 0 1px 2px rgba(13, 27, 76, .05), 0 10px 28px -12px rgba(13, 27, 76, .2);
   --shadow-lg: 0 28px 60px -24px rgba(10, 21, 70, .5);
@@ -80,11 +81,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 a { color: var(--accent); }
 code { font-family: ui-monospace, "Cascadia Code", monospace; font-size: .88em; }
 
-/* ---------- chrome: flag strip, header, footer, bottom nav ---------- */
-.flag { height: 4px; display: grid; grid-template-columns: repeat(3, 1fr); }
-.flag i:nth-child(1) { background: #ff9933; }
-.flag i:nth-child(2) { background: #f4f1ea; }
-.flag i:nth-child(3) { background: #138808; }
+/* ---------- chrome: top line, header, footer, bottom nav ---------- */
+.topline { height: 4px; background: var(--tri-line); }
 .top {
   position: sticky; top: 0; z-index: 30;
   background: color-mix(in srgb, var(--bg) 80%, transparent);
@@ -143,11 +141,8 @@ main.wide { max-width: 1120px; }
     var(--night);
   box-shadow: var(--shadow-lg);
 }
-/* a tricolour ribbon along the bottom of every hero card */
-.hero::after {
-  content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6px;
-  background: linear-gradient(90deg, #ff9933 0 33.3%, #ffffff 33.3% 66.6%, #138808 66.6%);
-}
+/* a saffron-to-green line along the bottom of every hero card */
+.hero::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 5px; background: var(--tri-line); }
 .hero h1 { font-size: clamp(28px, 6vw, 40px); margin: 6px 0 8px; }
 .hero p { margin: 0; color: rgba(255, 255, 255, .82); max-width: 560px; }
 .hero .eyebrow { color: #ffc27a; }
