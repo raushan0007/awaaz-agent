@@ -89,8 +89,9 @@ A failed check or a Baseten outage falls back to a fixed Hindi template, so the 
 
 ## Try it
 
-**Hosted demo:** _link added after deployment_. Citizen page `/`, tracking `/track.html`, officer dashboard
-`/officer.html` (demo login in the submission notes). The demo database holds two weeks of Supaul reports
+**Hosted demo:** https://awaaz-agent.onrender.com/ (free plan: the first visit after a quiet spell takes
+about a minute to wake up). Citizen page `/`, tracking `/track.html`, officer dashboard `/officer.html`
+(demo login in the submission notes). The demo database holds two weeks of Supaul reports
 that went through the live agent (`scripts/seed_demo.py`): every routing, merge, letter and update is real
 model output; only the timestamps were moved back.
 
