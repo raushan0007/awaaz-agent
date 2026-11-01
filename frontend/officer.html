@@ -14,43 +14,81 @@
 <body>
   <main class="wide">
     <section id="loginCard" class="card login" hidden>
-      <span class="eyebrow">अधिकारी</span>
-      <h2>लॉगिन करें</h2>
+      <div class="login-ic">🏛️</div>
+      <h2 style="text-align:center">अधिकारी लॉगिन</h2>
+      <p class="hint" style="text-align:center;margin-top:-4px">केवल अधिकृत सरकारी अधिकारियों के लिए। हर कार्रवाई आपके नाम से दर्ज होती है।</p>
       <form id="loginForm">
         <label for="user">यूज़रनेम</label>
         <input id="user" type="text" autocomplete="username" required>
         <label for="pass">पासवर्ड</label>
         <input id="pass" type="password" autocomplete="current-password" required>
-        <button class="send" type="submit">लॉगिन</button>
+        <button class="send" type="submit">🔐 लॉगिन करें</button>
         <p id="loginStatus" class="status"></p>
       </form>
     </section>
 
-    <div id="dash" hidden>
-      <section class="card hero">
-        <span class="eyebrow" id="deptName"></span>
+    <div id="dash" hidden style="display:grid;gap:20px">
+      <section class="card hero" id="hero">
+        <span class="kicker"><i></i><span id="deptName"></span></span>
         <h1 id="greeting">नमस्ते</h1>
         <p>सबसे खतरनाक समस्याएँ ऊपर हैं, फिर वे जिन्हें ज़्यादा लोगों ने बताया। हर शिकायत के साथ AI की जाँच और तैयार पत्र है।</p>
+        <div class="live"><i></i>आज: <b id="tFiled">0</b> आईं · <b id="tFixed">0</b> हल हुईं · <span id="refreshed"></span></div>
       </section>
 
-      <section class="tiles" id="stats" style="margin-top:18px"></section>
+      <div class="ticker" id="ticker" hidden>
+        <b><i></i>अभी हल हुईं</b>
+        <div class="ticker-run"><div class="ticker-track" id="tickerTrack"></div></div>
+      </div>
 
-      <div class="dash-grid" style="margin-top:18px">
-        <section class="card">
-          <h2>शिकायतों की स्थिति <small class="hint" id="days"></small></h2>
-          <div class="donut-wrap" id="donut"></div>
+      <div class="toolbar no-print">
+        <h2 style="font-size:24px">🧾 रिपोर्ट <small class="hint" id="period"></small></h2>
+        <div class="presets" id="presets">
+          <button class="chip" type="button" data-days="7" aria-pressed="false">7 दिन</button>
+          <button class="chip" type="button" data-days="30" aria-pressed="true">30 दिन</button>
+          <button class="chip" type="button" data-days="90" aria-pressed="false">90 दिन</button>
+          <button class="chip" type="button" id="print">🖨️ प्रिंट</button>
+        </div>
+      </div>
+
+      <section class="kpis" id="kpis"></section>
+
+      <div class="dash-grid">
+        <section class="card trend">
+          <h2>📈 आईं / हल हुईं (रोज़)</h2>
+          <div class="lg"><span><i style="background:#ff9a2e"></i>आईं</span><span><i style="background:#46dc5f"></i>हल हुईं</span></div>
+          <div id="trend"></div>
         </section>
         <section class="card">
-          <h2>🔥 हॉटस्पॉट</h2>
-          <p class="hint" style="margin:-6px 0 12px">जहाँ से बार-बार शिकायत आ रही है</p>
-          <div id="areas" class="areas"></div>
+          <h2>शिकायतों की स्थिति</h2>
+          <div class="donut-wrap" id="donut"></div>
         </section>
       </div>
 
-      <section style="margin-top:22px">
+      <section class="card">
+        <h2>🏆 विभागों की रैंकिंग</h2>
+        <div class="tbl-wrap" id="deptTable"></div>
+      </section>
+
+      <div class="dash-grid">
+        <section class="card">
+          <h2>📍 इलाक़े</h2>
+          <div class="tbl-wrap" id="areaTable"></div>
+        </section>
+        <section class="card">
+          <h2>👀 ध्यान दें</h2>
+          <div class="ltabs" id="ltabs">
+            <button class="chip" type="button" data-list="most_reported" aria-pressed="true">👥 सबसे ज़्यादा बताई गई</button>
+            <button class="chip" type="button" data-list="unheard" aria-pressed="false">🔕 अनसुनी</button>
+            <button class="chip" type="button" data-list="recent" aria-pressed="false">🆕 नई</button>
+            <button class="chip" type="button" data-list="times" aria-pressed="false">⏱️ समाधान समय</button>
+          </div>
+          <div id="list"></div>
+        </section>
+      </div>
+
+      <section id="queueSection">
         <div class="queue-head">
           <h2>काम की सूची <small id="queueCount"></small></h2>
-          <span class="status" id="refreshed"></span>
         </div>
         <div class="filters" id="filters">
           <button class="chip" type="button" data-filter="all" aria-pressed="true">सभी</button>

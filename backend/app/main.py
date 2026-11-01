@@ -301,6 +301,18 @@ def officer_stats(officer: dict = Depends(current_officer)) -> dict:
     return get_store().stats(officer["department"])
 
 
+@app.get("/api/officer/insights")
+def officer_insights(days: int = 30, officer: dict = Depends(current_officer)) -> dict:
+    """Trend, rankings and attention lists for the officer's own scope over 1 to 365 days."""
+    return get_store().insights(officer["department"], days=max(1, min(days, 365)))
+
+
+@app.get("/api/public/stats")
+def public_stats() -> dict:
+    """Home-page numbers anyone may see: counts, per-department progress, the latest problems."""
+    return get_store().public_stats()
+
+
 # Which moves an officer may make from each state.
 TRANSITIONS = {
     "open": {"in_progress", "resolved", "rejected"},

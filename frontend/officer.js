@@ -1,8 +1,11 @@
 import {
-  $, DEPARTMENTS, esc, evidenceHtml, formatTime, mountChrome, shrinkPhoto, STATUS, toast, traceHtml, URGENCY,
+  $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mountChrome, shrinkPhoto, STATUS,
+  timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
 mountChrome("officer");
+$("hero").insertAdjacentHTML("afterbegin", chakraHtml());
+$("hero").insertAdjacentHTML("beforeend", WAVES);
 $("headerExtra").innerHTML = `<div class="who" id="who" hidden></div>`;
 
 const SCOPES = { ...DEPARTMENTS, all: "सभी विभाग (ज़िला)" };
@@ -14,11 +17,11 @@ const ACTIONS = {
 };
 // Donut slices: label and colour per status (kept in step with the tile tones in style.css).
 const SLICES = [
-  ["open", "खुली", "#2563eb"],
-  ["in_progress", "काम चल रहा", "#f59e0b"],
-  ["resolved", "हल हुईं", "#16a34a"],
-  ["needs_review", "जाँच बाकी", "#6366f1"],
-  ["rejected", "बंद", "#9ca3af"],
+  ["open", "खुली", "#7aa7ff"],
+  ["in_progress", "काम चल रहा", "#ffb347"],
+  ["resolved", "हल हुईं", "#46dc5f"],
+  ["needs_review", "जाँच बाकी", "#a9b6ff"],
+  ["rejected", "बंद", "#7c8098"],
 ];
 // Only work started or finished can carry a photo of the work (the server checks the same).
 const PROOF_STATES = ["in_progress", "resolved"];
@@ -28,6 +31,10 @@ let token = null;
 try { token = localStorage.getItem("awaaz-officer-token"); } catch { /* private mode: log in each time */ }
 let queue = [];
 let filter = "all";
+let days = 30;
+let insight = null;
+let listKey = "most_reported";
+let firstPaint = true;
 
 async function api(path, options = {}) {
   const r = await fetch(path, {
@@ -103,25 +110,94 @@ function donutHtml(byStatus) {
       `<li><i style="background:${colour}"></i>${label} <b>${v}</b></li>`).join("")}</ul>`;
 }
 
-function renderStats(s) {
-  const n = (k) => s.by_status[k] || 0;
+// --- the analysis: KPIs, daily trend, rankings and attention lists ------------------------------------
+
+const rateHtml = (v) => `<div class="rate"><div class="bar"><i style="width:${v}%"></i></div><b>${v}%</b></div>`;
+const daysTxt = (v) => (v == null ? "–" : `${v} दिन`);
+const hoursTxt = (v) => (v == null ? "–" : v < 24 ? `${Math.round(v)} घंटे` : `${(v / 24).toFixed(1)} दिन`);
+
+function renderKpis(k) {
   const tiles = [
-    ["open", "खुली", n("open")],
-    ["in_progress", "काम चल रहा", n("in_progress")],
-    ["resolved", "हल हुईं", n("resolved")],
-    ["needs_review", "जाँच बाकी", n("needs_review")],
-    ["total", `कुल रिपोर्ट (${s.days} दिन)`, s.reports],
+    ["", "रिपोर्ट", k.reports],
+    ["info", "समस्याएँ", k.issues],
+    ["good", "हल हुईं", k.resolved],
+    ["good", "हल दर %", k.rate],
+    ["warn", "औसत समाधान (दिन)", k.avg_days ?? 0],
+    [k.unheard ? "bad" : "", "अनसुनी", k.unheard],
   ];
-  $("stats").innerHTML = tiles.map(([tone, label, value]) =>
-    `<div class="tile ${tone}"><b>${value}</b><span>${label}</span></div>`).join("");
-  $("days").textContent = `(${s.days} दिन)`;
-  $("donut").innerHTML = donutHtml(s.by_status);
-  const max = Math.max(1, ...s.top_areas.map((a) => a.reports));
-  $("areas").innerHTML = s.top_areas.length
-    ? s.top_areas.map((a) => `<div class="area-row"><span class="name" title="${esc(a.area)}">${esc(a.area || "—")}</span>
-        <div class="bar"><i style="width:${(a.reports / max) * 100}%"></i></div>
-        <span class="nums"><b>${a.reports}</b> रिपोर्ट<em>${a.open ? `${a.open} खुली${a.urgent ? `, ${a.urgent} ज़रूरी` : ""}` : "सब हल"}</em></span></div>`).join("")
-    : `<p class="status">अभी किसी जगह से बार-बार शिकायत नहीं आई है।</p>`;
+  $("kpis").innerHTML = tiles.map(([tone, label]) => `<div class="kpi ${tone}"><b>0</b><span>${label}</span></div>`).join("");
+  [...$("kpis").querySelectorAll("b")].forEach((b, i) => countUp(b, tiles[i][2]));
+}
+
+// Filed (saffron) and fixed (green) per day as two drawn lines over a light grid.
+function trendHtml(series) {
+  const W = 640, H = 220, L = 30, B = 24, T = 10;
+  const max = Math.max(2, ...series.map((d) => Math.max(d.filed, d.fixed)));
+  const x = (i) => L + (i * (W - L - 8)) / Math.max(1, series.length - 1);
+  const y = (v) => H - B - (v * (H - B - T)) / max;
+  const line = (key) => series.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(d[key]).toFixed(1)}`).join(" ");
+  const area = (key) => `${line(key)} L${x(series.length - 1).toFixed(1)} ${H - B} L${L} ${H - B}Z`;
+  const ticks = [0, Math.ceil(max / 2), max];
+  const every = Math.ceil(series.length / 6);
+  const labels = series.map((d, i) => (i % every === 0 || i === series.length - 1)
+    ? `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${new Date(d.day).toLocaleDateString("hi-IN", { day: "numeric", month: "short" })}</text>` : "").join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
+    <defs><linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9a2e" stop-opacity=".35"/><stop offset="1" stop-color="#ff9a2e" stop-opacity="0"/></linearGradient>
+    <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#46dc5f" stop-opacity=".3"/><stop offset="1" stop-color="#46dc5f" stop-opacity="0"/></linearGradient></defs>
+    <g class="grid">${ticks.map((t) => `<line x1="${L}" x2="${W}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`).join("")}</g>
+    <path d="${area("filed")}" fill="url(#gr)"/><path d="${area("fixed")}" fill="url(#gg)"/>
+    <path class="rcv draw" d="${line("filed")}" fill="none" stroke-width="2.5" stroke-linejoin="round"/>
+    <path class="rsv draw" d="${line("fixed")}" fill="none" stroke-width="2.5" stroke-linejoin="round"/>
+    ${labels}</svg>`;
+}
+
+function deptTableHtml(rows) {
+  if (!rows.length) return `<p class="status">इस अवधि में कोई शिकायत नहीं।</p>`;
+  return `<table class="tbl"><thead><tr><th>विभाग</th><th>समस्याएँ</th><th>रिपोर्ट</th><th>खुली</th><th>हल</th><th>हल दर</th>
+    <th>औसत समाधान</th><th>पहला जवाब</th><th>अनसुनी</th></tr></thead><tbody>${rows.map((d) => `<tr>
+    <td>${ICON[d.category] || "🔎"} ${esc(DEPARTMENTS[d.category] || "AI जाँच बाकी")}${d.badge ? `<span class="rbadge ${d.badge}">${d.badge === "best" ? "सबसे अच्छा" : "पीछे"}</span>` : ""}</td>
+    <td class="num">${d.issues}</td><td class="num">${d.reports}</td><td class="num">${d.open}</td><td class="num">${d.resolved}</td>
+    <td>${rateHtml(d.rate)}</td><td class="num">${daysTxt(d.avg_days)}</td><td class="num">${hoursTxt(d.avg_response_hours)}</td>
+    <td class="num">${d.unheard ? `<b style="color:var(--bad)">${d.unheard}</b>` : 0}</td></tr>`).join("")}</tbody></table>
+    ${rows.some((d) => d.badge) ? "" : `<p class="hint">रैंकिंग के लिए हर विभाग में कम से कम 3 शिकायतें चाहिए।</p>`}`;
+}
+
+function areaTableHtml(rows) {
+  if (!rows.length) return `<p class="status">इस अवधि में कोई शिकायत नहीं।</p>`;
+  return `<table class="tbl"><thead><tr><th>इलाक़ा</th><th>समस्याएँ</th><th>खुली</th><th>हल दर</th></tr></thead><tbody>${rows.map((a) =>
+    `<tr><td>${esc(a.area)}</td><td class="num">${a.issues}</td><td class="num">${a.open}</td><td>${rateHtml(a.rate)}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function listHtml(key) {
+  const rows = insight.lists[key] || [];
+  if (!rows.length) return `<p class="status">कुछ नहीं — अच्छी बात है।</p>`;
+  const extra = (p) => key === "unheard" ? `<b style="color:var(--bad)">${p.waiting_days} दिन से इंतज़ार</b>`
+    : key === "times" ? `<b style="color:var(--ok)">${p.fix_days} दिन में हल</b>`
+    : key === "most_reported" ? `👥 ${p.supporters}` : esc(timeAgo(p.created_at));
+  return `<table class="tbl"><tbody>${rows.slice(0, 8).map((p) => `<tr>
+    <td>#${p.id} ${ICON[p.category] || ""} ${esc(p.title_hi || CATEGORY[p.category] || "")}<br><small class="hint">📍 ${esc(p.area || "")}</small></td>
+    <td class="num">${extra(p)}</td></tr>`).join("")}</tbody></table>`;
+}
+
+function renderInsights(ins) {
+  insight = ins;
+  $("period").textContent = `(पिछले ${ins.days} दिन)`;
+  renderKpis(ins.kpis);
+  $("trend").innerHTML = trendHtml(ins.trend);
+  $("deptTable").innerHTML = deptTableHtml(ins.departments);
+  $("areaTable").innerHTML = areaTableHtml(ins.areas);
+  $("list").innerHTML = listHtml(listKey);
+}
+
+function renderPublic(s) {
+  $("tFiled").textContent = s.today.filed;
+  $("tFixed").textContent = s.today.fixed;
+  if (s.just_fixed.length) {
+    const items = s.just_fixed.map((f) =>
+      `<span>✅ #${f.id} ${esc(f.title_hi)} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
+    $("tickerTrack").innerHTML = items + items;
+    $("ticker").hidden = false;
+  }
 }
 
 function actionsHtml(c) {
@@ -194,8 +270,15 @@ async function refresh() {
   // Never re-render under an officer who is typing a note.
   if (document.activeElement && document.activeElement.closest(".actions")) return;
   if ([...document.querySelectorAll('[data-role="proof"]')].some((f) => f.files.length)) return;
-  const [stats, items] = await Promise.all([api("/api/officer/stats"), api("/api/officer/queue")]);
-  renderStats(stats);
+  const [stats, items, ins, pub] = await Promise.all([
+    api("/api/officer/stats"), api("/api/officer/queue"), api(`/api/officer/insights?days=${days}`),
+    fetch("/api/public/stats").then((r) => r.json()),
+  ]);
+  $("donut").innerHTML = donutHtml(stats.by_status);
+  // Re-draw the analysis only when it changed, so the animations do not replay every 30 seconds.
+  if (firstPaint || JSON.stringify(ins) !== JSON.stringify(insight)) renderInsights(ins);
+  firstPaint = false;
+  renderPublic(pub);
   queue = items;
   renderQueue();
   $("refreshed").textContent = "अपडेट: " + new Date().toLocaleTimeString("hi-IN", { hour: "numeric", minute: "2-digit" });
@@ -268,6 +351,21 @@ $("filters").addEventListener("click", (e) => {
   renderQueue();
 });
 $("search").addEventListener("input", renderQueue);
+$("presets").addEventListener("click", async (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip) return;
+  if (chip.id === "print") { window.print(); return; }
+  days = Number(chip.dataset.days);
+  document.querySelectorAll("#presets .chip[data-days]").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
+  renderInsights(await api(`/api/officer/insights?days=${days}`));
+});
+$("ltabs").addEventListener("click", (e) => {
+  const chip = e.target.closest(".chip");
+  if (!chip || !insight) return;
+  listKey = chip.dataset.list;
+  document.querySelectorAll("#ltabs .chip").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
+  $("list").innerHTML = listHtml(listKey);
+});
 $("queue").addEventListener("change", (e) => {
   if (e.target.dataset.role !== "proof") return;
   const name = e.target.closest(".proof-pick").querySelector('[data-role="proofName"]');

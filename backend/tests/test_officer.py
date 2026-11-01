@@ -207,3 +207,42 @@ def test_old_databases_gain_the_update_photo_column(tmp_path):
     s = Store(tmp_path / "old.db")
     assert "photo" in {r["name"] for r in s._db.execute("PRAGMA table_info(updates)")}
     s.close()
+
+
+def test_insights_rank_departments_and_list_what_needs_attention(client, store, open_model):
+    fixed = add(store, urgency="high", area="Ward 5, Supaul")
+    waiting = add(store, area="Ward 5, Supaul")
+    popular = add(store, area="Ward 9, Supaul")
+    add(store, status="merged", duplicate_of=popular, area="Ward 9, Supaul")
+    add(store, category="water", area="Ward 2, Supaul")
+    h = headers(client, "district.officer", "district-pass")
+    client.post(f"/api/officer/complaints/{fixed}/status", headers=h, json={"status": "resolved", "note": "theek"})
+
+    ins = client.get("/api/officer/insights?days=7", headers=h).json()
+    assert ins["kpis"]["issues"] == 4 and ins["kpis"]["reports"] == 5 and ins["kpis"]["resolved"] == 1
+    assert ins["kpis"]["rate"] == 25 and ins["kpis"]["unheard"] == 3
+    assert len(ins["trend"]) == 7 and sum(d["filed"] for d in ins["trend"]) == 5
+    assert sum(d["fixed"] for d in ins["trend"]) == 1
+    roads = next(d for d in ins["departments"] if d["category"] == "roads")
+    assert (roads["issues"], roads["resolved"], roads["rate"]) == (3, 1, 33)
+    assert ins["lists"]["most_reported"][0]["id"] == popular
+    assert [p["id"] for p in ins["lists"]["unheard"]] == [waiting, popular, popular + 2]
+    assert [p["id"] for p in ins["lists"]["times"]] == [fixed]
+
+    water = client.get("/api/officer/insights", headers=headers(client, "water.officer", "water-pass")).json()
+    assert water["kpis"]["issues"] == 1  # an officer sees only their own department
+
+
+def test_public_stats_count_without_report_text(client, store, open_model):
+    fixed = add(store)
+    add(store, status="merged", duplicate_of=fixed)
+    add(store, category="water")
+    h = headers(client, "roads.officer", "road-pass")
+    client.post(f"/api/officer/complaints/{fixed}/status", headers=h, json={"status": "resolved", "note": "theek"})
+    s = client.get("/api/public/stats").json()
+    assert (s["reports"], s["problems"]) == (3, 2)
+    assert s["by_status"] == {"resolved": 1, "open": 1}
+    assert s["by_category"]["roads"]["resolved"] == 1 and s["today"] == {"filed": 3, "fixed": 1}
+    assert s["avg_days_to_fix"] == 0.0
+    assert [f["id"] for f in s["just_fixed"]] == [fixed]
+    assert "sadak tooti hai" not in str(s)

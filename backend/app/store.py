@@ -7,6 +7,8 @@ import unicodedata
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
+
+IST = timezone(timedelta(hours=5, minutes=30))
 from pathlib import Path
 from typing import Any
 
@@ -266,6 +268,140 @@ class Store:
             "by_status": by_status,
             "reports": reports,
             "top_areas": [{"area": a, "reports": n, "open": o or 0, "urgent": u or 0} for a, n, o, u in areas],
+        }
+
+    def insights(self, department: str, days: int = 30) -> dict[str, Any]:
+        """The officer's analysis for the last `days` days: KPIs, a daily trend, department and area
+        rankings, and the lists that need attention (most reported, unheard, slowest/fastest fixes)."""
+        where, args = self._scope(department)
+        now = datetime.now(timezone.utc)
+        since = (now - timedelta(days=days)).isoformat(timespec="seconds")
+        rows = [dict(r) for r in self._db.execute(
+            f"SELECT id, created_at, area, area_key, status, category, urgency, duplicate_of, decision"
+            f" FROM complaints WHERE {where} AND created_at >= ? AND status != 'rejected' ORDER BY id",
+            (*args, since),
+        ).fetchall()]
+        ids = [r["id"] for r in rows]
+        marks = ",".join("?" * len(ids)) or "NULL"
+        first_update, fixed_at = {}, {}
+        for cid, status, at in self._db.execute(
+            f"SELECT complaint_id, status, created_at FROM updates WHERE complaint_id IN ({marks}) ORDER BY id", ids
+        ).fetchall():
+            first_update.setdefault(cid, at)
+            if status == "resolved":
+                fixed_at.setdefault(cid, at)
+        supporters = dict(self._db.execute(
+            f"SELECT duplicate_of, COUNT(*) + 1 FROM complaints WHERE duplicate_of IN ({marks}) GROUP BY duplicate_of", ids
+        ).fetchall())
+        span = lambda a, b: (datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds()  # noqa: E731
+        problems = [r for r in rows if r["duplicate_of"] is None]
+        for r in problems:
+            r["supporters"] = supporters.get(r["id"], 1)
+            r["title_hi"] = (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", "")
+            r["fix_days"] = round(span(r["created_at"], fixed_at[r["id"]]) / 86400, 1) if r["id"] in fixed_at else None
+            r["response_hours"] = round(span(r["created_at"], first_update[r["id"]]) / 3600, 1) if r["id"] in first_update else None
+            del r["decision"]
+
+        def summary(group: list[dict]) -> dict[str, Any]:
+            fixed = [g["fix_days"] for g in group if g["status"] == "resolved" and g["fix_days"] is not None]
+            responded = [g["response_hours"] for g in group if g["response_hours"] is not None]
+            resolved = sum(g["status"] == "resolved" for g in group)
+            return {
+                "issues": len(group),
+                "reports": sum(g["supporters"] for g in group),
+                "open": sum(g["status"] in OPEN_STATES for g in group),
+                "resolved": resolved,
+                "rate": round(100 * resolved / len(group)) if group else 0,
+                "avg_days": round(sum(fixed) / len(fixed), 1) if fixed else None,
+                "avg_response_hours": round(sum(responded) / len(responded), 1) if responded else None,
+                "unheard": sum(g["status"] == "open" and g["response_hours"] is None for g in group),
+            }
+
+        trend = {}
+        for i in range(days - 1, -1, -1):
+            trend[(now - timedelta(days=i)).astimezone(IST).date().isoformat()] = {"filed": 0, "fixed": 0}
+        for r in rows:
+            day = datetime.fromisoformat(r["created_at"]).astimezone(IST).date().isoformat()
+            if day in trend:
+                trend[day]["filed"] += 1
+        for at in fixed_at.values():
+            day = datetime.fromisoformat(at).astimezone(IST).date().isoformat()
+            if day in trend:
+                trend[day]["fixed"] += 1
+
+        by_dept: dict[str, list] = {}
+        by_area: dict[str, list] = {}
+        for p in problems:
+            by_dept.setdefault(p["category"] or "review", []).append(p)
+            if p["area_key"]:
+                by_area.setdefault(p["area_key"], []).append(p)
+        departments = sorted(({"category": k, **summary(v)} for k, v in by_dept.items()),
+                             key=lambda d: (-d["rate"], -d["issues"]))
+        ranked = [d for d in departments if d["issues"] >= 3]  # too few to judge otherwise
+        if len(ranked) >= 2:
+            ranked[0]["badge"], ranked[-1]["badge"] = "best", "lagging"
+        areas = sorted(({"area": v[0]["area"], **summary(v)} for v in by_area.values()),
+                       key=lambda a: (-a["issues"], -a["open"]))[:10]
+
+        open_now = [p for p in problems if p["status"] in OPEN_STATES]
+        waiting = lambda p: round(span(p["created_at"], now.isoformat()) / 86400, 1)  # noqa: E731
+        lists = {
+            "most_reported": sorted(open_now, key=lambda p: (-p["supporters"], p["id"]))[:8],
+            "unheard": [{**p, "waiting_days": waiting(p)} for p in
+                        sorted((p for p in open_now if p["response_hours"] is None), key=lambda p: p["created_at"])][:8],
+            "recent": problems[::-1][:8],
+            "times": sorted((p for p in problems if p["fix_days"] is not None), key=lambda p: p["fix_days"]),
+        }
+        return {"days": days, "kpis": {**summary(problems), "reports": len(rows)}, "trend": [
+            {"day": d, **v} for d, v in trend.items()], "departments": departments, "areas": areas, "lists": lists}
+
+    def public_stats(self, recent: int = 8) -> dict[str, Any]:
+        """What the home page shows anyone: counts, per-department progress and the latest problems.
+
+        Titles, places and status only, never report text or photos."""
+        rows = self._db.execute(
+            "SELECT id, created_at, area, status, category, urgency, duplicate_of, decision FROM complaints"
+            " WHERE status NOT IN ('rejected', 'needs_review') ORDER BY id DESC"
+        ).fetchall()
+        problems = [r for r in rows if r["duplicate_of"] is None]
+        fixed_at = dict(self._db.execute(
+            "SELECT complaint_id, MIN(created_at) FROM updates WHERE status = 'resolved' GROUP BY complaint_id"
+        ).fetchall())
+        days = [
+            (datetime.fromisoformat(fixed_at[r["id"]]) - datetime.fromisoformat(r["created_at"])).total_seconds() / 86400
+            for r in problems if r["status"] == "resolved" and r["id"] in fixed_at
+        ]
+        today = (datetime.now(IST)).date()
+        is_today = lambda iso: datetime.fromisoformat(iso).astimezone(IST).date() == today  # noqa: E731
+        by_status: dict[str, int] = {}
+        by_category: dict[str, dict[str, int]] = {}
+        for r in problems:
+            by_status[r["status"]] = by_status.get(r["status"], 0) + 1
+            c = by_category.setdefault(r["category"] or "other", {"total": 0, "open": 0, "in_progress": 0, "resolved": 0})
+            c["total"] += 1
+            c[r["status"]] = c.get(r["status"], 0) + 1
+        return {
+            "reports": len(rows),
+            "problems": len(problems),
+            "by_status": by_status,
+            "avg_days_to_fix": round(sum(days) / len(days), 1) if days else None,
+            "today": {"filed": sum(is_today(r["created_at"]) for r in rows),
+                      "fixed": sum(is_today(t) for t in fixed_at.values())},
+            "by_category": by_category,
+            "just_fixed": [
+                {"id": r["id"], "area": r["area"], "category": r["category"], "fixed_at": fixed_at[r["id"]],
+                 "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", "")}
+                for r in sorted((r for r in problems if r["status"] == "resolved" and r["id"] in fixed_at),
+                                key=lambda r: fixed_at[r["id"]], reverse=True)[:8]
+            ],
+            "recent": [
+                {
+                    "id": r["id"], "created_at": r["created_at"], "area": r["area"], "status": r["status"],
+                    "category": r["category"], "urgency": r["urgency"], "supporters": self.supporters(r["id"]),
+                    "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", ""),
+                }
+                for r in problems[:recent]
+            ],
         }
 
     # --- officer accounts -------------------------------------------------------------------------

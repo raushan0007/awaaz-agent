@@ -13,20 +13,37 @@
 </head>
 <body>
   <main>
-    <section class="card hero">
-      <span class="eyebrow">सुपौल · फारबिसगंज, बिहार</span>
-      <h1>अपनी समस्या बोलिए,<br>सही विभाग तक हम पहुँचाएँगे</h1>
-      <p>सड़क, पानी, बिजली, नाला या कूड़ा — हिंदी, हिंग्लिश या अंग्रेज़ी में बोलिए। फ़ॉर्म भरने की ज़रूरत नहीं।</p>
-      <ol class="how">
-        <li><b>1</b>बोलिए या लिखिए</li>
-        <li><b>2</b>AI जाँचे, फ़ोटो परखे</li>
-        <li><b>3</b>विभाग को पत्र, आपको नंबर</li>
-      </ol>
+    <section class="card hero" id="hero">
+      <span class="kicker"><i></i>हर नागरिक की आवाज़ · Meta AI</span>
+      <h1>आपकी आवाज़,<br><span class="hl">सही दफ़्तर तक।</span></h1>
+      <p>समस्या अपनी भाषा में बोलिए, लिखिए या फ़ोटो भेजिए। हम उसे औपचारिक शिकायत बनाकर सही विभाग तक पहुँचाएँगे।</p>
+      <div class="stats-row">
+        <div class="stat"><b id="sHeard">0</b><span>आवाज़ें सुनी गईं</span></div>
+        <div class="stat sf"><b id="sOpen">0</b><span>खुली शिकायतें</span></div>
+        <div class="stat ok"><b id="sFixed">0</b><span>हल हुईं</span></div>
+        <div class="stat"><b id="sDays">–</b><span>दिन में औसत समाधान</span></div>
+      </div>
+      <div class="live"><i></i>आज: <b id="tFiled">0</b> आईं · <b id="tFixed">0</b> हल हुईं</div>
+      <div class="demo" id="demo" hidden>
+        <small>🔒 असली शिकायत · निजी जानकारी छिपी</small>
+        <p class="said" id="demoSaid"></p>
+        <span class="demo-state" id="demoState">✨ AI समझ रहा है <span class="dots"><i></i><i></i><i></i></span></span>
+        <div class="demo-out" id="demoOut"></div>
+        <div class="demo-dots" id="demoDots"></div>
+      </div>
     </section>
 
-    <div class="marquee" aria-hidden="true"><div class="marquee-track" id="depts"></div></div>
+    <div class="ticker" id="ticker" hidden>
+      <b><i></i>अभी हल हुईं</b>
+      <div class="ticker-run"><div class="ticker-track" id="tickerTrack"></div></div>
+    </div>
 
-    <section class="card voice">
+    <div>
+      <p class="marquee-label">सीधे इन विभागों तक</p>
+      <div class="marquee" aria-hidden="true"><div class="marquee-track" id="depts"></div></div>
+    </div>
+
+    <section class="card voice glow-card reveal">
       <span class="eyebrow">आवाज़ से शिकायत</span>
       <div class="mic-wrap" id="micWrap">
         <button id="mic" class="mic" aria-label="रिकॉर्डिंग शुरू करें">
@@ -34,41 +51,67 @@
         </button>
       </div>
       <canvas id="meter" width="640" height="64" aria-hidden="true"></canvas>
-      <p id="micStatus" class="status">माइक दबाकर बोलिए। दोबारा दबाने पर रुकेगा।</p>
+      <p id="micStatus" class="status">दबाकर बोलिए। दोबारा दबाने पर रुकेगा।</p>
       <label class="check"><input id="keepSample" type="checkbox" checked> रिकॉर्डिंग टेस्ट सैंपल के रूप में सेव करें (सिर्फ़ इसी कंप्यूटर पर)</label>
       <div id="sampleInfo" class="sample" hidden></div>
       <audio id="playback" controls hidden></audio>
-    </section>
 
-    <section class="card">
-      <label for="text">आपकी शिकायत</label>
-      <textarea id="text" rows="4" placeholder="जैसे: वार्ड 5 में गांधी चौक के पास सड़क पर बड़े गड्ढे हैं…"></textarea>
+      <div class="or">या लिखिए</div>
+      <div style="text-align:left">
+        <label for="text" style="margin-top:0">आपकी शिकायत</label>
+        <textarea id="text" rows="4" placeholder="जैसे: हमारे मोहल्ले में 3 दिन से बिजली नहीं है, ट्रांसफ़ॉर्मर जल गया है…"></textarea>
+        <div class="examples" id="examples"><small>उदाहरण आज़माइए:</small></div>
 
-      <span class="label" id="townLabel">शहर</span>
-      <div class="towns" role="radiogroup" aria-labelledby="townLabel">
-        <label><input type="radio" name="town" value="Supaul" checked><span>सुपौल<small>Supaul</small></span></label>
-        <label><input type="radio" name="town" value="Forbesganj"><span>फारबिसगंज<small>Forbesganj</small></span></label>
-      </div>
-
-      <label for="area">जगह (वार्ड / मोहल्ला / चौक)</label>
-      <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 8, सुभाष चौक">
-
-      <span class="label">फ़ोटो <small class="hint">(ज़रूरी नहीं, पर मदद करती है)</small></span>
-      <div class="photo-pick">
-        <label class="pick-btn" for="photo">📷 फ़ोटो लें या चुनें</label>
-        <input id="photo" type="file" accept="image/*" hidden>
-        <div id="photoPreview" class="photo-preview" hidden>
-          <img id="photoThumb" alt="चुनी गई फ़ोटो">
-          <button id="photoRemove" type="button" class="link">हटाएँ</button>
+        <span class="label" id="townLabel">शहर</span>
+        <div class="towns" role="radiogroup" aria-labelledby="townLabel">
+          <label><input type="radio" name="town" value="Supaul" checked><span>सुपौल<small>Supaul</small></span></label>
+          <label><input type="radio" name="town" value="Forbesganj"><span>फारबिसगंज<small>Forbesganj</small></span></label>
         </div>
-      </div>
-      <p class="hint">🔒 फ़ोटो से लोकेशन (GPS) और फ़ोन की जानकारी आपके फ़ोन पर ही हटा दी जाती है।</p>
 
-      <button id="send" class="send">शिकायत भेजें →</button>
+        <label for="area">जगह (वार्ड / मोहल्ला / चौक)</label>
+        <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 8, सुभाष चौक">
+
+        <span class="label">फ़ोटो <small class="hint">(ज़रूरी नहीं, पर मदद करती है)</small></span>
+        <div class="photo-pick">
+          <label class="pick-btn" for="photo">📷 फ़ोटो लें या चुनें</label>
+          <input id="photo" type="file" accept="image/*" hidden>
+          <div id="photoPreview" class="photo-preview" hidden>
+            <img id="photoThumb" alt="चुनी गई फ़ोटो">
+            <button id="photoRemove" type="button" class="link">हटाएँ</button>
+          </div>
+        </div>
+        <p class="safe">🔒 आपका मोबाइल, आधार नंबर और फ़ोटो की लोकेशन कभी सार्वजनिक नहीं होगी।</p>
+      </div>
+
+      <button id="send" class="send">📣 आवाज़ भेजिए</button>
       <div id="thinking" class="thinking" hidden><span class="dots"><i></i><i></i><i></i></span><span id="thinkingText"></span></div>
     </section>
 
     <section id="result" class="card ticket" hidden></section>
+
+    <section class="reveal">
+      <div class="section-head">
+        <span class="kicker"><i></i>समस्या से समाधान तक</span>
+        <h2>आपकी हर समस्या, सही हाथों तक</h2>
+        <p>हर विभाग का असली हिसाब: कितनी शिकायतें आईं और कितनी हल हुईं।</p>
+      </div>
+      <div class="dept-grid" id="deptGrid" style="margin-top:16px"></div>
+      <div class="overall" id="overall"></div>
+    </section>
+
+    <section class="reveal">
+      <h2 style="font-size:26px;margin-bottom:12px">कैसे काम करता है</h2>
+      <div class="steps3">
+        <div class="step"><span class="n">1</span><div class="ic">🎙️</div><h3>बोलिए</h3><p>हिंदी, हिंग्लिश या अंग्रेज़ी, जैसे आप बात करते हैं।</p></div>
+        <div class="step"><span class="n">2</span><div class="ic">🧠</div><h3>AI समझता है</h3><p>औपचारिक शिकायत, विभाग और ज़रूरत तय करता है; फ़ोटो SAM से जाँचता है।</p></div>
+        <div class="step"><span class="n">3</span><div class="ic">🏛️</div><h3>सही दफ़्तर</h3><p>एक जैसी शिकायतें जुड़ती हैं, अपडेट आपकी भाषा में आते हैं।</p></div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <div class="feed-head" style="margin-bottom:12px"><span class="dot-live"></span><h2>आपके ज़िले की ताज़ा आवाज़ें</h2></div>
+      <div class="feed" id="feed"></div>
+    </section>
   </main>
 
   <script type="module" src="app.js"></script>

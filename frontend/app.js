@@ -1,10 +1,12 @@
 import { Recorder } from "./recorder.js";
 import {
-  $, areaHtml, DEPARTMENTS, esc, evidenceHtml, mountChrome, shrinkPhoto, STATUS, stepperHtml, toast, traceHtml,
-  URGENCY,
+  $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, mountChrome, revealOnScroll,
+  shrinkPhoto, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
 mountChrome("citizen");
+$("hero").insertAdjacentHTML("afterbegin", chakraHtml());
+$("hero").insertAdjacentHTML("beforeend", WAVES);
 
 const mic = $("mic");
 const meter = $("meter");
@@ -188,6 +190,7 @@ async function send() {
     if (photoBlob) form.append("photo", photoBlob, "photo.jpg");
     const c = await postForm("/api/complaints", form);
     showResult(c);
+    loadPublic().catch(() => {});
     toast(c.status === "rejected" ? "शिकायत स्वीकार नहीं हुई" : `✓ शिकायत #${c.id} दर्ज हुई`, c.status === "rejected" ? "bad" : "ok");
   } catch (err) {
     toast("गड़बड़ी: " + err.message, "bad");
@@ -198,8 +201,122 @@ async function send() {
 }
 
 // Department ribbon, doubled so the loop is seamless.
-const chips = Object.values(DEPARTMENTS).map((d) => `<span>${esc(d)}</span>`).join("");
+const chips = Object.entries(DEPARTMENTS).map(([k, d]) => `<span>${ICON[k]} ${esc(d)}</span>`).join("");
 $("depts").innerHTML = chips + chips;
+
+const EXAMPLES = [
+  ["⚡ बिजली", "Hamare mohalle me 3 din se bijli nahi hai, transformer jal gaya hai"],
+  ["💧 पानी", "Ward me 4 din se nal me paani nahi aa raha, log handpump se paani la rahe hain"],
+  ["🛣️ सड़क", "Station road par bade gaddhe hain, kal ek auto palat gaya"],
+  ["🧹 सफ़ाई", "Chowk par 10 din se kooda nahi utha, badbu aa rahi hai"],
+];
+$("examples").insertAdjacentHTML("beforeend", EXAMPLES.map(([label], i) =>
+  `<button type="button" data-i="${i}">${label}</button>`).join(""));
+$("examples").addEventListener("click", (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  $("text").value = EXAMPLES[b.dataset.i][1];
+  $("text").focus();
+});
+
+// --- live numbers, the AI replay, the ticker, department progress and the latest voices --------------
+
+let shownOnce = false;
+
+function deptCard(key, c) {
+  const pct = c.total ? Math.round((100 * c.resolved) / c.total) : 0;
+  const doing = c.in_progress ? `⏳ ${c.in_progress} पर काम जारी` : c.open ? `🕒 ${c.open} कतार में` : "✅ सब हल";
+  return `<div class="dept-card ${pct >= 50 ? "good" : ""}"><div class="ic">${ICON[key] || "📋"}</div>
+    <h3>${esc(CATEGORY[key] || key)}</h3><div class="num">${c.resolved}<small> / ${c.total} हल</small></div>
+    <div class="bar"><i style="width:${shownOnce ? pct : 0}%" data-w="${pct}"></i></div><span class="chip">${doing}</span></div>`;
+}
+
+function feedCard(r) {
+  return `<a class="feed-card ${esc(r.status === "resolved" ? "resolved" : r.urgency || "")}" href="/track.html?id=${r.id}">
+    <div class="meta"><span class="badges" style="margin:0">
+      <span class="badge">${ICON[r.category] || "📋"} ${esc(CATEGORY[r.category] || "")}</span>
+      ${r.urgency ? `<span class="badge ${esc(r.urgency)}">${esc(URGENCY[r.urgency])}</span>` : ""}
+      <span class="badge ${esc(r.status)}">${esc(STATUS[r.status] || r.status)}</span></span>
+      <small>${esc(timeAgo(r.created_at))}</small></div>
+    <h3>${esc(r.title_hi || "शिकायत #" + r.id)}</h3>
+    <small>📍 ${esc(r.area || "")} · #${r.id}${r.supporters > 1 ? ` · 👥 ${r.supporters} लोगों ने बताया` : ""}</small></a>`;
+}
+
+let demoItems = [];
+let demoIndex = 0;
+let demoTimer = null;
+
+// Replays a real routed complaint: its title types in, then the agent's routing pops out.
+async function playDemo() {
+  if (!demoItems.length) return;
+  const r = demoItems[demoIndex % demoItems.length];
+  const box = $("demo");
+  box.hidden = false;
+  box.classList.remove("done");
+  $("demoOut").innerHTML = "";
+  $("demoState").innerHTML = `✨ AI समझ रहा है <span class="dots"><i></i><i></i><i></i></span>`;
+  $("demoDots").innerHTML = demoItems.map((_, i) => `<i class="${i === demoIndex % demoItems.length ? "on" : ""}"></i>`).join("");
+  const text = r.title_hi || "";
+  for (let i = 1; i <= text.length; i++) {
+    $("demoSaid").textContent = text.slice(0, i);
+    await new Promise((res) => setTimeout(res, 28));
+  }
+  await new Promise((res) => setTimeout(res, 900));
+  box.classList.add("done");
+  $("demoState").textContent = "✓ AI ने वर्गीकृत किया";
+  $("demoOut").innerHTML = [
+    `${ICON[r.category] || "📋"} ${esc(DEPARTMENTS[r.category] || "")}`,
+    r.urgency ? `${esc(URGENCY[r.urgency])}` : "",
+    `📍 ${esc(r.area || "")}`,
+  ].filter(Boolean).map((t, i) => `<span style="animation-delay:${i * 0.15}s">${t}</span>`).join("");
+  demoIndex += 1;
+  demoTimer = setTimeout(playDemo, 3800);
+}
+
+async function loadPublic() {
+  const s = await fetch("/api/public/stats").then((r) => r.json());
+  const n = (k) => s.by_status[k] || 0;
+  if (!shownOnce) {
+    countUp($("sHeard"), s.reports);
+    countUp($("sOpen"), n("open") + n("in_progress"));
+    countUp($("sFixed"), n("resolved"));
+    if (s.avg_days_to_fix != null) countUp($("sDays"), s.avg_days_to_fix);
+  } else {
+    $("sHeard").textContent = s.reports;
+    $("sOpen").textContent = n("open") + n("in_progress");
+    $("sFixed").textContent = n("resolved");
+    if (s.avg_days_to_fix != null) $("sDays").textContent = s.avg_days_to_fix;
+  }
+  $("tFiled").textContent = s.today.filed;
+  $("tFixed").textContent = s.today.fixed;
+
+  if (s.just_fixed.length) {
+    const items = s.just_fixed.map((f) =>
+      `<span>✅ #${f.id} ${esc(f.title_hi)} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
+    $("tickerTrack").innerHTML = items + items;
+    $("ticker").hidden = false;
+  }
+
+  const order = Object.keys(DEPARTMENTS).filter((k) => s.by_category[k]);
+  $("deptGrid").innerHTML = order.map((k) => deptCard(k, s.by_category[k])).join("");
+  const pct = s.problems ? Math.round((100 * n("resolved")) / s.problems) : 0;
+  $("overall").innerHTML = `कुल प्रगति: <b>${n("resolved")} / ${s.problems}</b> हल (${pct}%)` +
+    (s.avg_days_to_fix != null ? ` · औसत समाधान: <b>${s.avg_days_to_fix} दिन</b>` : "") +
+    `<div class="bar"><i style="width:${pct}%"></i></div>`;
+  $("feed").innerHTML = s.recent.map(feedCard).join("");
+  if (!shownOnce) {
+    // grow the progress bars once the cards are on screen
+    requestAnimationFrame(() => setTimeout(() =>
+      document.querySelectorAll("#deptGrid .bar i").forEach((b) => { b.style.width = b.dataset.w + "%"; }), 300));
+    demoItems = s.recent.filter((r) => r.title_hi && r.category).slice(0, 5);
+    if (!demoTimer) playDemo();
+  }
+  shownOnce = true;
+}
+
+loadPublic().catch(() => {});
+setInterval(() => loadPublic().catch(() => {}), 30000);
+revealOnScroll();
 
 // Samples are a local-only aid for recording the demo voice; a hosted copy keeps none.
 fetch("/api/health").then((r) => r.json()).then((h) => {

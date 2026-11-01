@@ -1,6 +1,9 @@
-import { $, esc, formatTime, mountChrome, STATUS, stepperHtml, URGENCY } from "./shared.js";
+import { $, chakraHtml, esc, formatTime, mountChrome, STATUS, stepperHtml, URGENCY, WAVES } from "./shared.js";
 
 mountChrome("track");
+const hero = document.querySelector(".hero");
+hero.insertAdjacentHTML("afterbegin", chakraHtml());
+hero.insertAdjacentHTML("beforeend", WAVES);
 
 async function show(id) {
   $("status").textContent = "ढूँढ रहे हैं…";

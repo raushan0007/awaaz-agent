@@ -128,6 +128,8 @@ and a `demo.officer` login is created with that password.
 | `POST /api/transcribe` | WAV (mono, 16-bit, 16/24 kHz) → transcript |
 | `POST /api/complaints` | `text`, `town`, optional `area`, `photo` → the agent's decision, tool trace and area overview |
 | `GET /api/complaints/{id}/track` | the citizen's view: status and Hindi updates |
+| `GET /api/public/stats` | home-page numbers: counts, per-department progress, latest problems, just fixed (no report text) |
+| `GET /api/officer/insights?days=` | the officer's KPIs, daily trend, department and area rankings, attention lists |
 | `GET /api/areas/summary?area=` | one place's problems, their status and supporters (no report text or photos) |
 | `GET /api/complaints/{id}/photo` | the stored, metadata-free photo |
 | `POST /api/officer/login` | officer login → bearer token |
@@ -144,7 +146,7 @@ and a `demo.officer` login is created with that password.
 python -m pytest -q backend/tests
 ```
 
-66 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
+68 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
 photo metadata stripping, officer scoping and status rules, the open-model fallback, and the demo bootstrap.
 `python scripts/smoke_test.py sample.wav photo.jpg` calls every live model once;
 `python scripts/agent_demo.py` runs the agent live on a new report, a duplicate and spam.
@@ -161,6 +163,7 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 | Oct 31 | Docker / Render deployment, demo database, this README |
 | Nov 1 | Second town (Forbesganj), town-scoped duplicate search, area overview, real photo reports |
 | Nov 1 | Redesigned UI: ticket card with progress stepper, phone bottom nav, officer donut chart and filters; voice samples kept only on the author's machine; officers attach a photo of the work |
+| Nov 1 | Night-navy design with the turning Ashoka chakra, live numbers and AI replay on the home page; officer analysis (trend, rankings, attention lists, printable report) |
 
 ## Known limits
 

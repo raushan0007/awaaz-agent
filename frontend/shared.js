@@ -71,15 +71,18 @@ export function mountChrome(page) {
   document.body.insertAdjacentHTML("afterbegin", `
     <div class="topline" aria-hidden="true"></div>
     <header class="top"><div class="top-in">
-      <a class="brand" href="/">${LOGO}<span><b>आवाज़</b><small>Awaaz · सुपौल · फारबिसगंज</small></span></a>
+      <a class="brand" href="/">${LOGO}<span><b>आवाज़</b><small>शिकायत पोर्टल · सुपौल · फारबिसगंज</small></span></a>
       <div id="headerExtra"></div>
       <nav class="pills" aria-label="पन्ने">${links(page, false)}</nav>
     </div></header>`);
   document.body.insertAdjacentHTML("beforeend", `
     <footer>
+      <div class="foot-line"></div>
+      <div class="brand" style="justify-content:center;margin:0">${LOGO}</div>
+      <p class="jai">जय हिन्द</p>
+      <p>सुपौल और फारबिसगंज, बिहार के लोगों के लिए · Meta Global AI Developer Hackathon 2026</p>
       <p>🔒 आपका मोबाइल, आधार नंबर और फ़ोटो की लोकेशन किसी को नहीं दिखती।</p>
-      <p class="models">Muse Spark · Muse Voice Transcribe · SAM 3.1 · Muse Spark Open</p>
-      <p>Meta Global AI Hackathon 2026 · जय हिंद</p>
+      <p class="models">MUSE SPARK · VOICE TRANSCRIBE · SAM 3.1 · MUSE SPARK OPEN</p>
     </footer>
     <nav class="bottom-nav" aria-label="पन्ने">${links(page, true)}</nav>
     <div class="toasts" id="toasts" role="status" aria-live="polite"></div>`);
@@ -91,6 +94,68 @@ export function toast(message, tone = "") {
   el.textContent = message;
   $("toasts").append(el);
   setTimeout(() => el.remove(), 4200);
+}
+
+// --- motion ------------------------------------------------------------------------------------------
+
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** Count a number up from 0 when it is first shown. */
+export function countUp(el, to, ms = 1200) {
+  const decimals = String(to).includes(".") ? 1 : 0;
+  if (REDUCED || !to) { el.textContent = Number(to).toFixed(decimals); return; }
+  const start = performance.now();
+  const step = (now) => {
+    const t = Math.min(1, (now - start) / ms);
+    el.textContent = (to * (1 - (1 - t) ** 3)).toFixed(decimals);
+    if (t < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+/** Fade sections up as they scroll into view. */
+export function revealOnScroll(root = document) {
+  const els = root.querySelectorAll(".reveal:not(.in)");
+  if (REDUCED || !("IntersectionObserver" in window)) { els.forEach((e) => e.classList.add("in")); return; }
+  const io = new IntersectionObserver((entries) => entries.forEach((e) => {
+    if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }), { threshold: 0.12 });
+  els.forEach((e) => io.observe(e));
+  // Never leave content hidden if the observer does not fire (background tabs, odd embeds).
+  setTimeout(() => els.forEach((e) => e.classList.add("in")), 2000);
+}
+
+/** The Ashoka chakra with sun rays behind it; the hero turns both slowly. */
+export function chakraHtml() {
+  const spokes = Array.from({ length: 24 }, (_, i) => {
+    const a = (i * 15 * Math.PI) / 180;
+    return `<line x1="100" y1="100" x2="${(100 + 62 * Math.cos(a)).toFixed(1)}" y2="${(100 + 62 * Math.sin(a)).toFixed(1)}"/>`;
+  }).join("");
+  const rays = Array.from({ length: 36 }, (_, i) => {
+    const a = (i * 10 * Math.PI) / 180;
+    return `<line x1="${(100 + 74 * Math.cos(a)).toFixed(1)}" y1="${(100 + 74 * Math.sin(a)).toFixed(1)}" x2="${(100 + 98 * Math.cos(a)).toFixed(1)}" y2="${(100 + 98 * Math.sin(a)).toFixed(1)}"/>`;
+  }).join("");
+  return `<svg class="chakra-bg" viewBox="0 0 200 200" aria-hidden="true">
+    <defs><radialGradient id="sun"><stop offset="0" stop-color="#ffcf8a" stop-opacity=".9"/><stop offset="1" stop-color="#ff9933" stop-opacity="0"/></radialGradient></defs>
+    <circle cx="100" cy="100" r="98" fill="url(#sun)" opacity=".5"/>
+    <g class="rays" stroke="#ffb35c" stroke-width="2" stroke-linecap="round" opacity=".7">${rays}</g>
+    <g class="wheel" stroke="#dfe6ff" fill="none"><circle cx="100" cy="100" r="64" stroke-width="5"/><circle cx="100" cy="100" r="10" fill="#dfe6ff"/>
+      <g stroke-width="2.2">${spokes}</g></g></svg>`;
+}
+
+/** Saffron, white and green waves along the bottom of the hero. */
+export const WAVES = `<svg class="waves" viewBox="0 0 1200 64" preserveAspectRatio="none" aria-hidden="true">
+  <path d="M0 22 C200 2 400 42 600 22 S1000 2 1240 22 V64 H0Z" fill="#ff9933" opacity=".95"/>
+  <path d="M0 34 C200 16 400 52 600 34 S1000 16 1240 34 V64 H0Z" fill="#ffffff"/>
+  <path d="M0 46 C200 30 400 62 600 46 S1000 30 1240 46 V64 H0Z" fill="#138808"/></svg>`;
+
+export const ICON = { roads: "🛣️", water: "💧", electricity: "⚡", streetlight: "💡", sanitation: "🧹", drainage: "🌊", other: "📋" };
+
+export function timeAgo(iso) {
+  const hours = (Date.now() - new Date(iso)) / 36e5;
+  if (hours < 1) return "अभी";
+  if (hours < 24) return `${Math.floor(hours)} घंटे पहले`;
+  return `${Math.floor(hours / 24)} दिन पहले`;
 }
 
 // --- shared renderers -----------------------------------------------------------------------------
