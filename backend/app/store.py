@@ -412,8 +412,9 @@ class Store:
         return sorted(seen.values(), key=lambda p: -p["reports"])
 
     def public_stats(self, recent: int = 8, place: str = "") -> dict[str, Any]:
-        """What the home page shows anyone, for all of India or one town: counts, per-department progress
-        and the latest problems. Titles, places and status only, never report text or photos."""
+        """The public dashboard, for all of India or one town: counts, a 14-day trend, every department's
+        progress and reply time, emergencies, what most people reported, and solved problems with their
+        before/after photos. Titles, places, status and photos only; never report text, numbers or pins."""
         rows = self._db.execute(
             "SELECT id, created_at, area, area_key, status, category, urgency, duplicate_of, decision,"
             " contact_hash IS NOT NULL AS gave_mobile, lat IS NOT NULL AS pinned, has_photo FROM complaints"
@@ -428,27 +429,64 @@ class Store:
         ).fetchall())
         first_reply = dict(self._db.execute(
             "SELECT complaint_id, MIN(created_at) FROM updates GROUP BY complaint_id").fetchall())
+        proof = dict(self._db.execute(  # the latest photo an officer sent of the work
+            "SELECT complaint_id, MAX(id) FROM updates WHERE photo IS NOT NULL GROUP BY complaint_id").fetchall())
+        backers: dict[int, int] = {}
+        for r in rows:
+            if r["duplicate_of"] is not None:
+                backers[r["duplicate_of"]] = backers.get(r["duplicate_of"], 0) + 1
         hours = lambda a, b: (datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds() / 3600  # noqa: E731
-        days = [
-            (datetime.fromisoformat(fixed_at[r["id"]]) - datetime.fromisoformat(r["created_at"])).total_seconds() / 86400
-            for r in problems if r["status"] == "resolved" and r["id"] in fixed_at
-        ]
-        today = (datetime.now(IST)).date()
+        days = [hours(r["created_at"], fixed_at[r["id"]]) / 24
+                for r in problems if r["status"] == "resolved" and r["id"] in fixed_at]
+        now = datetime.now(IST)
+        today = now.date()
         is_today = lambda iso: datetime.fromisoformat(iso).astimezone(IST).date() == today  # noqa: E731
+
+        def card(r) -> dict[str, Any]:
+            d = {
+                "id": r["id"], "created_at": r["created_at"], "area": r["area"], "status": r["status"],
+                "category": r["category"], "urgency": r["urgency"], "supporters": backers.get(r["id"], 0) + 1,
+                "info_level": info_level(bool(r["gave_mobile"]), bool(r["pinned"]), bool(r["has_photo"])),
+                "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", ""),
+                "has_photo": bool(r["has_photo"]),
+            }
+            if r["id"] in fixed_at:
+                d["fixed_at"] = fixed_at[r["id"]]
+                d["fix_days"] = round(hours(r["created_at"], fixed_at[r["id"]]) / 24, 1)
+            if r["id"] in proof:
+                d["proof_update"] = proof[r["id"]]
+            return d
+
         by_status: dict[str, int] = {}
-        by_category: dict[str, dict[str, int]] = {}
+        by_category: dict[str, dict[str, Any]] = {}
         for r in problems:
             by_status[r["status"]] = by_status.get(r["status"], 0) + 1
-            c = by_category.setdefault(r["category"] or "other",
-                                       {"total": 0, "open": 0, "in_progress": 0, "resolved": 0, "_replies": []})
+            c = by_category.setdefault(r["category"] or "other", {"total": 0, "reports": 0, "open": 0,
+                                                                  "in_progress": 0, "resolved": 0, "_replies": []})
             c["total"] += 1
+            c["reports"] += backers.get(r["id"], 0) + 1
             c[r["status"]] = c.get(r["status"], 0) + 1
             if r["id"] in first_reply:
                 c["_replies"].append(hours(r["created_at"], first_reply[r["id"]]))
         for c in by_category.values():
             replies = c.pop("_replies")
-            # Public accountability: how long a department takes to answer at all, and how many wait unanswered.
+            # Public accountability: how long a department takes to answer at all.
             c["avg_reply_hours"] = round(sum(replies) / len(replies), 1) if replies else None
+
+        trend = {(today - timedelta(days=i)).isoformat(): {"filed": 0, "fixed": 0} for i in range(13, -1, -1)}
+        for r in rows:
+            day = datetime.fromisoformat(r["created_at"]).astimezone(IST).date().isoformat()
+            if day in trend:
+                trend[day]["filed"] += 1
+        ids = {r["id"] for r in problems}
+        for cid, at in fixed_at.items():
+            day = datetime.fromisoformat(at).astimezone(IST).date().isoformat()
+            if cid in ids and day in trend:
+                trend[day]["fixed"] += 1
+
+        open_now = [r for r in problems if r["status"] in OPEN_STATES]
+        solved = sorted((r for r in problems if r["status"] == "resolved" and r["id"] in fixed_at),
+                        key=lambda r: fixed_at[r["id"]], reverse=True)
         return {
             "place": place,
             "reports": len(rows),
@@ -456,23 +494,17 @@ class Store:
             "by_status": by_status,
             "avg_days_to_fix": round(sum(days) / len(days), 1) if days else None,
             "today": {"filed": sum(is_today(r["created_at"]) for r in rows),
-                      "fixed": sum(is_today(t) for t in fixed_at.values())},
+                      "fixed": sum(is_today(fixed_at[i]) for i in ids if i in fixed_at)},
             "by_category": by_category,
-            "just_fixed": [
-                {"id": r["id"], "area": r["area"], "category": r["category"], "fixed_at": fixed_at[r["id"]],
-                 "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", "")}
-                for r in sorted((r for r in problems if r["status"] == "resolved" and r["id"] in fixed_at),
-                                key=lambda r: fixed_at[r["id"]], reverse=True)[:8]
-            ],
-            "recent": [
-                {
-                    "id": r["id"], "created_at": r["created_at"], "area": r["area"], "status": r["status"],
-                    "category": r["category"], "urgency": r["urgency"], "supporters": self.supporters(r["id"]),
-                    "info_level": info_level(bool(r["gave_mobile"]), bool(r["pinned"]), bool(r["has_photo"])),
-                    "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", ""),
-                }
-                for r in problems[:recent]
-            ],
+            "trend": [{"day": d, **v} for d, v in trend.items()],
+            # danger to life or health, still open: shown first and loud
+            "emergency": [card(r) for r in sorted((r for r in open_now if r["urgency"] == "critical"),
+                                                  key=lambda r: -(backers.get(r["id"], 0)))][:6],
+            "most_reported": [card(r) for r in sorted(open_now, key=lambda r: (-(backers.get(r["id"], 0)), r["id"]))
+                              if backers.get(r["id"], 0)][:5],
+            "just_fixed": [card(r) for r in solved[:8]],
+            "solved": [card(r) for r in solved if r["has_photo"] or r["id"] in proof][:6],
+            "recent": [card(r) for r in problems[:recent]],
         }
 
     # --- officer accounts -------------------------------------------------------------------------

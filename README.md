@@ -100,7 +100,9 @@ A failed check or a Baseten outage falls back to a fixed Hindi template, so the 
 - Mobile, Aadhaar, email and PAN numbers are replaced with a visible tag (`[मोबाइल नंबर छिपाया गया]`) before
   the model, the officers or the database see them (Devanagari digits included); the citizen is told.
 - Photos lose EXIF/GPS on the phone and again on the server.
-- The public tracking page shows the title, department and updates, never the report text or the photo.
+- Public pages show each problem's title, department, area, status, timings and photos (the citizen is told
+  the photo is public; its location and phone details are stripped first), never the report text, the
+  mobile number or the GPS pin.
 - Officers see only their department (PBKDF2 passwords, expiring bearer sessions).
 
 ## Try it
@@ -159,7 +161,7 @@ and a `demo.officer` login is created with that password.
 python -m pytest -q backend/tests
 ```
 
-75 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
+76 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
 photo metadata stripping, officer scoping and status rules, the open-model fallback, and the demo bootstrap.
 `python scripts/smoke_test.py sample.wav photo.jpg` calls every live model once;
 `python scripts/agent_demo.py` runs the agent live on a new report, a duplicate and spam.
@@ -176,6 +178,7 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 | Oct 31 | Docker / Render deployment, demo database, this README |
 | Nov 1 | Any town in India (typed or from the phone's location), town-scoped duplicate search, area overview, real photo reports from Forbesganj |
 | Nov 1 | Redesigned UI: ticket card with progress stepper, phone bottom nav, officer donut chart and filters; voice samples kept only on the author's machine; officers attach a photo of the work |
+| Nov 1 | Public dashboard per town: emergencies first, 14-day trend, category bars with how many people reported, most-reported, before/after photos of fixed problems; form in its own sheet; GPS radar with live accuracy |
 | Nov 1 | Ticket popup (copy, WhatsApp, track), "my complaints" by phone or mobile, information level, public department reply times, every step's timing and a public no-reply warning on tracking |
 | Nov 1 | Night-navy design with the turning Ashoka chakra, live numbers and AI replay on the home page; officer analysis (trend, rankings, attention lists, printable report) |
 

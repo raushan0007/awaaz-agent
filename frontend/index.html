@@ -16,20 +16,11 @@
     <section class="card hero" id="hero">
       <span class="kicker"><i></i>भारत के हर नागरिक की आवाज़ · Meta AI</span>
       <h1>आपकी आवाज़,<br><span class="hl">सही दफ़्तर तक।</span></h1>
-      <p>समस्या अपनी भाषा में बोलिए, लिखिए या फ़ोटो भेजिए। हम उसे औपचारिक शिकायत बनाकर सही विभाग तक पहुँचाएँगे।</p>
-      <div class="stats-row">
-        <div class="stat"><b id="sHeard">0</b><span>आवाज़ें सुनी गईं</span></div>
-        <div class="stat sf"><b id="sOpen">0</b><span>खुली शिकायतें</span></div>
-        <div class="stat ok"><b id="sFixed">0</b><span>हल हुईं</span></div>
-        <div class="stat"><b id="sDays">–</b><span>दिन में औसत समाधान</span></div>
+      <p>समस्या बोलिए, लिखिए या फ़ोटो भेजिए — AI उसे सही विभाग तक पहुँचाता है, और उसका पूरा हाल सबके सामने रहता है।</p>
+      <div class="cta-row">
+        <button class="hero-cta" type="button" data-open-form>📣 शिकायत करें</button>
+        <a class="hero-cta ghost-cta" href="/track.html">🔎 अपनी शिकायत का हाल</a>
       </div>
-      <div class="live"><i></i>आज: <b id="tFiled">0</b> आईं · <b id="tFixed">0</b> हल हुईं</div>
-      <a class="hero-cta" href="#complain">📣 अभी शिकायत करें <span>↓</span></a>
-      <div class="place-bar" id="placeBar">
-        <button class="place on" type="button" data-place="">🗺️ पूरा भारत</button>
-        <button class="place near" type="button" id="nearMe">📍 मेरे आस-पास</button>
-      </div>
-      <p class="place-note" id="placeNote" hidden></p>
       <div class="demo" id="demo" hidden>
         <small>🔒 असली शिकायत · निजी जानकारी छिपी</small>
         <p class="said" id="demoSaid"></p>
@@ -39,16 +30,110 @@
       </div>
     </section>
 
+    <section class="card place-card">
+      <div class="place-head"><span>📍 किस इलाक़े का हाल देखें?</span><small id="placeNote" hidden></small></div>
+      <div class="place-bar" id="placeBar">
+        <button class="place on" type="button" data-place="">🗺️ पूरा भारत</button>
+        <button class="place near" type="button" id="nearMe">📍 मेरे आस-पास</button>
+      </div>
+    </section>
+
+    <section class="emergency" id="emergency" hidden>
+      <div class="em-head"><span class="siren">🚨</span><div><h2>आपातकाल — जान या सेहत को ख़तरा</h2>
+        <small>ये शिकायतें अभी खुली हैं; विभाग इन्हें सबसे पहले देखता है</small></div></div>
+      <div class="em-list" id="emList"></div>
+    </section>
+
+    <section class="dash" id="dash">
+      <div class="dash-title"><h2 id="dashTitle">📊 पूरे भारत का हाल</h2><span class="live"><i></i>लाइव · आज <b id="tFiled">0</b> आईं · <b id="tFixed">0</b> हल</span></div>
+      <div class="kpis home-kpis">
+        <div class="kpi"><b id="sHeard">0</b><span>आवाज़ें सुनी गईं</span></div>
+        <div class="kpi info"><b id="sProblems">0</b><span>अलग-अलग समस्याएँ</span></div>
+        <div class="kpi warn"><b id="sOpen">0</b><span>अभी खुली</span></div>
+        <div class="kpi good"><b id="sFixed">0</b><span>हल हुईं</span></div>
+        <div class="kpi"><b id="sDays">–</b><span>दिन में औसत समाधान</span></div>
+      </div>
+      <div class="dash-grid2">
+        <div class="card"><h3>शिकायतों की स्थिति</h3><div class="donut-wrap" id="homeDonut"></div></div>
+        <div class="card trend"><h3>पिछले 14 दिन</h3>
+          <div class="lg"><span><i style="background:#ff9a2e"></i>आईं</span><span><i style="background:#46dc5f"></i>हल हुईं</span></div>
+          <div id="homeTrend"></div></div>
+      </div>
+      <div class="card">
+        <h3>किस तरह की समस्या — कितनी शिकायतें, कितने लोगों ने बताईं</h3>
+        <div class="cat-bars" id="catBars"></div>
+      </div>
+      <div class="card" id="mostCard" hidden>
+        <h3>👥 सबसे ज़्यादा लोगों ने बताया</h3>
+        <div class="most" id="mostList"></div>
+      </div>
+    </section>
+
     <div class="ticker" id="ticker" hidden>
       <b><i></i>अभी हल हुईं</b>
       <div class="ticker-run"><div class="ticker-track" id="tickerTrack"></div></div>
     </div>
 
+    <section class="reveal" id="solvedSec" hidden>
+      <div class="section-head"><span class="kicker"><i></i>सबूत के साथ</span><h2>✅ हल हुईं — पहले और बाद</h2>
+        <p>नागरिक की फ़ोटो में समस्या, अधिकारी की फ़ोटो में काम।</p></div>
+      <div class="solved" id="solved" style="margin-top:14px"></div>
+    </section>
+
+    <section class="reveal">
+      <div class="feed-head" style="margin-bottom:12px"><span class="dot-live"></span><h2 id="feedTitle">ताज़ा आवाज़ें</h2></div>
+      <div class="feed" id="feed"></div>
+    </section>
+
+    <section class="reveal">
+      <div class="section-head">
+        <span class="kicker"><i></i>जवाबदेही</span>
+        <h2>विभागों का रिपोर्ट कार्ड</h2>
+        <p>हर विभाग का असली हिसाब: कितनी आईं, कितनी हल हुईं, पहला जवाब कितनी देर में।</p>
+      </div>
+      <div class="dept-grid" id="deptGrid" style="margin-top:16px"></div>
+      <div class="overall" id="overall"></div>
+    </section>
+
+    <section class="reveal">
+      <div class="section-head" style="margin-bottom:14px"><span class="kicker"><i></i>पूरी पारदर्शिता</span>
+        <h2>सब कुछ खुला है — सिर्फ़ आपकी निजी जानकारी नहीं</h2>
+        <p>हर शिकायत का हाल, हर विभाग का जवाब देने का समय, सब सबके सामने।</p></div>
+      <div class="open-box">
+        <div class="pub"><h3>✅ सबको दिखता है</h3><ul>
+          <li>हर शिकायत का शीर्षक, विभाग, ज़रूरत और जगह (मोहल्ला/वार्ड)</li>
+          <li>शिकायत की फ़ोटो (लोकेशन हटाकर) और अधिकारी की काम की फ़ोटो</li>
+          <li>AI ने कौन-सा विभाग और क्यों चुना</li>
+          <li>हर कदम का समय: कब दर्ज हुई, कब काम शुरू, कब हल</li>
+          <li>विभाग ने कितने घंटे में जवाब दिया, कितनी शिकायतें अनसुनी हैं</li></ul></div>
+        <div class="hid"><h3>🔒 किसी को नहीं दिखता</h3><ul>
+          <li>आपका नाम और मोबाइल नंबर (अधिकारी को भी नहीं)</li>
+          <li>शिकायत में लिखे मोबाइल, आधार, ईमेल, PAN — अपने आप छिप जाते हैं</li>
+          <li>आपकी सटीक GPS जगह (सिर्फ़ अधिकारी को, मौके पर पहुँचने के लिए)</li>
+          <li>फ़ोटो की लोकेशन और फ़ोन की जानकारी</li></ul></div>
+      </div>
+    </section>
+
+    <section class="reveal">
+      <div class="section-head" style="margin-bottom:14px"><span class="kicker"><i></i>तीन आसान कदम</span><h2>कैसे काम करता है</h2></div>
+      <div class="steps3">
+        <div class="step"><span class="n">1</span><div class="ic">🎙️</div><h3>बोलिए</h3><p>हिंदी, हिंग्लिश या अंग्रेज़ी, जैसे आप बात करते हैं।</p></div>
+        <div class="step"><span class="n">2</span><div class="ic">🧠</div><h3>AI समझता है</h3><p>औपचारिक शिकायत, विभाग और ज़रूरत तय करता है; फ़ोटो SAM से जाँचता है।</p></div>
+        <div class="step"><span class="n">3</span><div class="ic">🏛️</div><h3>सही दफ़्तर</h3><p>एक जैसी शिकायतें जुड़ती हैं, अपडेट आपकी भाषा में आते हैं।</p></div>
+      </div>
+    </section>
+
     <div>
       <p class="marquee-label">सीधे इन विभागों तक</p>
       <div class="marquee" aria-hidden="true"><div class="marquee-track" id="depts"></div></div>
     </div>
+  </main>
 
+  <button class="fab" type="button" data-open-form aria-label="शिकायत करें">📣 <span>शिकायत करें</span></button>
+
+  <div class="form-sheet" id="formSheet" hidden role="dialog" aria-modal="true" aria-label="नई शिकायत">
+    <div class="form-sheet-in">
+      <button class="sheet-x" type="button" id="closeForm" aria-label="बंद करें">✕</button>
     <section class="card complain glow-card" id="complain">
       <div class="complain-head">
         <span class="eyebrow">नई शिकायत</span>
@@ -120,7 +205,7 @@
             <button id="photoRemove" type="button" class="link">हटाएँ</button>
           </div>
         </div>
-        <p class="hint">🔒 फ़ोटो की लोकेशन और फ़ोन की जानकारी आपके फ़ोन पर ही हटा दी जाती है।</p>
+        <p class="hint">👁️ फ़ोटो शिकायत के साथ सबको दिखेगी, ताकि सब देख सकें कि समस्या क्या है। 🔒 उसकी लोकेशन और फ़ोन की जानकारी आपके फ़ोन पर ही हटा दी जाती है — किसी का चेहरा या घर का नंबर न दिखे तो बेहतर।</p>
       </div>
 
       <!-- ④ send -->
@@ -138,51 +223,9 @@
       </div>
     </section>
 
-    <section id="result" class="card ticket" hidden></section>
-
-    <section class="reveal">
-      <div class="section-head">
-        <span class="kicker"><i></i>समस्या से समाधान तक</span>
-        <h2>आपकी हर समस्या, सही हाथों तक</h2>
-        <p>हर विभाग का असली हिसाब: कितनी शिकायतें आईं और कितनी हल हुईं।</p>
-      </div>
-      <div class="dept-grid" id="deptGrid" style="margin-top:16px"></div>
-      <div class="overall" id="overall"></div>
-    </section>
-
-    <section class="reveal">
-      <div class="section-head" style="margin-bottom:14px"><span class="kicker"><i></i>पूरी पारदर्शिता</span>
-        <h2>सब कुछ खुला है — सिर्फ़ आपकी निजी जानकारी नहीं</h2>
-        <p>हर शिकायत का हाल, हर विभाग का जवाब देने का समय, सब सबके सामने।</p></div>
-      <div class="open-box">
-        <div class="pub"><h3>✅ सबको दिखता है</h3><ul>
-          <li>हर शिकायत का शीर्षक, विभाग, ज़रूरत और जगह (मोहल्ला/वार्ड)</li>
-          <li>AI ने कौन-सा विभाग और क्यों चुना</li>
-          <li>हर कदम का समय: कब दर्ज हुई, कब काम शुरू, कब हल</li>
-          <li>विभाग ने कितने घंटे में जवाब दिया, कितनी शिकायतें अनसुनी हैं</li>
-          <li>अधिकारी के अपडेट और काम की फ़ोटो</li></ul></div>
-        <div class="hid"><h3>🔒 किसी को नहीं दिखता</h3><ul>
-          <li>आपका मोबाइल नंबर (अधिकारी को भी नहीं)</li>
-          <li>शिकायत में लिखे मोबाइल, आधार, ईमेल, PAN — अपने आप छिप जाते हैं</li>
-          <li>आपकी सटीक GPS जगह (सिर्फ़ अधिकारी को, मौके पर पहुँचने के लिए)</li>
-          <li>फ़ोटो की लोकेशन और फ़ोन की जानकारी</li></ul></div>
-      </div>
-    </section>
-
-    <section class="reveal">
-      <div class="section-head" style="margin-bottom:14px"><span class="kicker"><i></i>तीन आसान कदम</span><h2>कैसे काम करता है</h2></div>
-      <div class="steps3">
-        <div class="step"><span class="n">1</span><div class="ic">🎙️</div><h3>बोलिए</h3><p>हिंदी, हिंग्लिश या अंग्रेज़ी, जैसे आप बात करते हैं।</p></div>
-        <div class="step"><span class="n">2</span><div class="ic">🧠</div><h3>AI समझता है</h3><p>औपचारिक शिकायत, विभाग और ज़रूरत तय करता है; फ़ोटो SAM से जाँचता है।</p></div>
-        <div class="step"><span class="n">3</span><div class="ic">🏛️</div><h3>सही दफ़्तर</h3><p>एक जैसी शिकायतें जुड़ती हैं, अपडेट आपकी भाषा में आते हैं।</p></div>
-      </div>
-    </section>
-
-    <section class="reveal">
-      <div class="feed-head" style="margin-bottom:12px"><span class="dot-live"></span><h2>आपके ज़िले की ताज़ा आवाज़ें</h2></div>
-      <div class="feed" id="feed"></div>
-    </section>
-  </main>
+      <section id="result" class="card ticket" hidden></section>
+    </div>
+  </div>
 
   <script type="module" src="app.js"></script>
 </body>

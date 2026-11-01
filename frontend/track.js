@@ -52,6 +52,7 @@ async function show(id) {
         <span class="badge">🗓️ ${esc(formatTime(t.created_at))}</span>
       </div>
       ${t.merged_into ? `<p class="privacy-note">आपकी शिकायत पहले से दर्ज शिकायत #${t.merged_into} से जोड़ी गई है, इसलिए उसी का हाल दिखाया जा रहा है।</p>` : ""}
+      ${t.has_photo ? `<figure class="proof" style="margin-bottom:12px"><img src="/api/complaints/${t.id}/photo" alt="शिकायत की फ़ोटो" loading="lazy"><figcaption style="color:var(--text-2)">📷 नागरिक की भेजी फ़ोटो</figcaption></figure>` : ""}
       ${decision}
       <h3 class="section-title">शिकायत का पूरा सफ़र</h3>
       ${noReply}

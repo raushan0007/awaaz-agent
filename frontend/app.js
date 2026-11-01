@@ -2,7 +2,7 @@ import { Recorder } from "./recorder.js";
 import {
   $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
   mountChrome, revealOnScroll,
-  hoursText, LEVEL, saveTicket, shrinkPhoto, starsHtml, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  donutSvg, hoursText, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
 mountChrome("citizen");
@@ -272,15 +272,54 @@ function deptCard(key, c) {
     <span class="reply">⏱️ ${reply}</span></div>`;
 }
 
-function feedCard(r) {
-  return `<a class="feed-card ${esc(r.status === "resolved" ? "resolved" : r.urgency || "")}" href="/track.html?id=${r.id}">
-    <div class="meta"><span class="badges" style="margin:0">
+const photoOf = (r) => (r.has_photo ? `/api/complaints/${r.id}/photo` : "");
+const thumb = (r, cls = "") => (r.has_photo
+  ? `<img class="${cls}" src="${photoOf(r)}" alt="शिकायत की फ़ोटो" loading="lazy">`
+  : `<span class="noimg ${cls}">${ICON[r.category] || "📋"}</span>`);
+const stagger = (i) => `style="animation-delay:${Math.min(i, 8) * 70}ms"`;
+
+function feedCard(r, i = 0) {
+  return `<a class="feed-card pop-in ${r.has_photo ? "has-pic" : ""} ${esc(r.status === "resolved" ? "resolved" : r.urgency || "")}" ${stagger(i)} href="/track.html?id=${r.id}">
+    <div><div class="meta"><span class="badges" style="margin:0">
       <span class="badge">${ICON[r.category] || "📋"} ${esc(CATEGORY[r.category] || "")}</span>
       ${r.urgency ? `<span class="badge ${esc(r.urgency)}">${esc(URGENCY[r.urgency])}</span>` : ""}
       <span class="badge ${esc(r.status)}">${esc(STATUS[r.status] || r.status)}</span></span>
       <small>${esc(timeAgo(r.created_at))}</small></div>
     <h3>${esc(r.title_hi || "शिकायत #" + r.id)}</h3>
-    <small>📍 ${esc(r.area || "")} · #${r.id}${r.supporters > 1 ? ` · 👥 ${r.supporters} लोगों ने बताया` : ""} · ${starsHtml(r.info_level, false)}</small></a>`;
+    <small>📍 ${esc(r.area || "")} · #${r.id}${r.supporters > 1 ? ` · 👥 ${r.supporters} लोगों ने बताया` : ""} · ${starsHtml(r.info_level, false)}</small></div>
+    ${r.has_photo ? `<img class="thumb" src="${photoOf(r)}" alt="" loading="lazy">` : ""}</a>`;
+}
+
+function emergencyHtml(list) {
+  return list.map((r, i) => `<a class="em-card pop-in" ${stagger(i)} href="/track.html?id=${r.id}">${thumb(r)}
+    <span><b>${esc(r.title_hi || "शिकायत #" + r.id)}</b>
+    <small>📍 ${esc(r.area || "")} · ${esc(STATUS[r.status])} · ${esc(timeAgo(r.created_at))}${r.supporters > 1 ? ` · 👥 ${r.supporters} लोग` : ""}</small></span></a>`).join("");
+}
+
+// Each kind of problem: how many complaints, how many people reported them, how many are fixed.
+function catBarsHtml(byCat) {
+  const rows = Object.entries(byCat).sort((a, b) => b[1].reports - a[1].reports);
+  const max = Math.max(1, ...rows.map(([, c]) => c.reports));
+  return rows.map(([k, c]) => `<div class="cat-row"><span class="ic">${ICON[k] || "📋"}</span><div>
+      <div class="top"><b>${esc(CATEGORY[k] || k)}</b><small>${c.total} शिकायतें · 👥 ${c.reports} लोग · ✅ ${c.resolved} हल</small></div>
+      <div class="bars"><i class="rep" data-w="${(100 * c.reports) / max}"></i><i class="fix" data-w="${(100 * c.resolved) / max}"></i></div>
+    </div></div>`).join("") +
+    `<div class="cat-legend"><span><i style="background:rgba(255,154,46,.5)"></i>कितने लोगों ने बताया</span><span><i style="background:#46dc5f"></i>हल हुईं</span></div>`;
+}
+
+function mostHtml(list) {
+  return list.map((r, i) => `<a class="pop-in" ${stagger(i)} href="/track.html?id=${r.id}">${thumb(r)}
+    <span><b>${esc(r.title_hi || "शिकायत #" + r.id)}</b><br><small class="hint">📍 ${esc(r.area || "")} · ${esc(STATUS[r.status])}</small></span>
+    <span class="count">${r.supporters}<small>लोग</small></span></a>`).join("");
+}
+
+function solvedHtml(list) {
+  return list.map((r, i) => `<a class="ba pop-in" ${stagger(i)} href="/track.html?id=${r.id}">
+    <div class="ba-pics">
+      <figure>${r.has_photo ? `<img src="${photoOf(r)}" alt="समस्या की फ़ोटो" loading="lazy">` : ICON[r.category] || "📋"}<figcaption>पहले</figcaption></figure>
+      <figure class="after">${r.proof_update ? `<img src="/api/updates/${r.proof_update}/photo" alt="काम के बाद की फ़ोटो" loading="lazy">` : "✅"}<figcaption>बाद में</figcaption></figure>
+    </div>
+    <div class="ba-body"><b>${esc(r.title_hi || "")}</b><small>✅ ${r.fix_days != null ? `${r.fix_days} दिन में हल` : "हल हुई"} · 📍 ${esc(r.area || "")}</small></div></a>`).join("");
 }
 
 let demoItems = [];
@@ -314,22 +353,36 @@ async function playDemo() {
   demoTimer = setTimeout(playDemo, 3800);
 }
 
+let lastPlace = null;
+
 async function loadPublic() {
   const s = await fetch(`/api/public/stats?place=${encodeURIComponent(place)}`).then((r) => r.json());
   const n = (k) => s.by_status[k] || 0;
-  if (!shownOnce) {
-    countUp($("sHeard"), s.reports);
-    countUp($("sOpen"), n("open") + n("in_progress"));
-    countUp($("sFixed"), n("resolved"));
-    if (s.avg_days_to_fix != null) countUp($("sDays"), s.avg_days_to_fix);
-  } else {
-    $("sHeard").textContent = s.reports;
-    $("sOpen").textContent = n("open") + n("in_progress");
-    $("sFixed").textContent = n("resolved");
-    if (s.avg_days_to_fix != null) $("sDays").textContent = s.avg_days_to_fix;
-  }
+  const fresh = lastPlace !== place;  // a new place animates again; the 30 s refresh does not
+  lastPlace = place;
+  const nums = [["sHeard", s.reports], ["sProblems", s.problems], ["sOpen", n("open") + n("in_progress")],
+    ["sFixed", n("resolved")], ["sDays", s.avg_days_to_fix]];
+  nums.forEach(([id, v]) => {
+    if (v == null) { $(id).textContent = "–"; return; }
+    fresh ? countUp($(id), v) : ($(id).textContent = v);
+  });
   $("tFiled").textContent = s.today.filed;
   $("tFixed").textContent = s.today.fixed;
+  $("dashTitle").textContent = `📊 ${place ? place : "पूरे भारत"} का हाल`;
+  $("feedTitle").textContent = `${place ? place + " की" : "देश भर की"} ताज़ा आवाज़ें`;
+
+  $("emergency").hidden = !s.emergency.length;
+  $("emList").innerHTML = emergencyHtml(s.emergency);
+
+  if (fresh) {
+    $("homeDonut").innerHTML = donutSvg(s.by_status);
+    $("homeTrend").innerHTML = trendSvg(s.trend);
+    $("catBars").innerHTML = catBarsHtml(s.by_category);
+    requestAnimationFrame(() => setTimeout(() =>
+      document.querySelectorAll("#catBars .bars i").forEach((b) => { b.style.width = b.dataset.w + "%"; }), 150));
+  }
+  $("mostCard").hidden = !s.most_reported.length;
+  $("mostList").innerHTML = mostHtml(s.most_reported);
 
   $("ticker").hidden = !s.just_fixed.length;
   if (s.just_fixed.length) {
@@ -337,6 +390,8 @@ async function loadPublic() {
       `<span>✅ #${f.id} ${esc(f.title_hi)} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
     $("tickerTrack").innerHTML = items + items;
   }
+  $("solvedSec").hidden = !s.solved.length;
+  $("solved").innerHTML = solvedHtml(s.solved);
 
   const order = Object.keys(DEPARTMENTS).filter((k) => s.by_category[k]);
   $("deptGrid").innerHTML = order.map((k) => deptCard(k, s.by_category[k])).join("");
@@ -345,15 +400,40 @@ async function loadPublic() {
     (s.avg_days_to_fix != null ? ` · औसत समाधान: <b>${s.avg_days_to_fix} दिन</b>` : "") +
     `<div class="bar"><i style="width:${pct}%"></i></div>`;
   $("feed").innerHTML = s.recent.map(feedCard).join("");
+  requestAnimationFrame(() => setTimeout(() =>
+    document.querySelectorAll("#deptGrid .bar i").forEach((b) => { b.style.width = b.dataset.w + "%"; }), 300));
   if (!shownOnce) {
-    // grow the progress bars once the cards are on screen
-    requestAnimationFrame(() => setTimeout(() =>
-      document.querySelectorAll("#deptGrid .bar i").forEach((b) => { b.style.width = b.dataset.w + "%"; }), 300));
     demoItems = s.recent.filter((r) => r.title_hi && r.category).slice(0, 5);
     if (!demoTimer) playDemo();
   }
   shownOnce = true;
 }
+
+// --- the complaint form lives in a sheet, so the home page stays a dashboard ----------------------------
+
+function openForm() {
+  $("formSheet").hidden = false;
+  document.body.classList.add("sheet-open");
+  if (location.hash !== "#complain") history.pushState(null, "", "#complain");
+  setTimeout(() => $("text").focus({ preventScroll: true }), 350);
+}
+
+function closeForm() {
+  $("formSheet").hidden = true;
+  document.body.classList.remove("sheet-open");
+  if (location.hash === "#complain") history.pushState(null, "", location.pathname + location.search);
+}
+
+document.addEventListener("click", (e) => {
+  if (e.target.closest("[data-open-form]")) { e.preventDefault(); openForm(); }
+  const nav = e.target.closest('a[href="/#complain"]');
+  if (nav && location.pathname === "/") { e.preventDefault(); openForm(); }
+});
+$("closeForm").addEventListener("click", closeForm);
+$("formSheet").addEventListener("click", (e) => { if (e.target === $("formSheet")) closeForm(); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("formSheet").hidden) closeForm(); });
+window.addEventListener("popstate", () => (location.hash === "#complain" ? openForm() : closeForm()));
+if (location.hash === "#complain") openForm();
 
 // --- places: all of India by default, one town on a tap, or wherever the phone is ---------------------
 
@@ -430,9 +510,18 @@ function showPin() {
 $("locate").addEventListener("click", async () => {
   const b = $("locate");
   b.disabled = true;
-  b.querySelector("b").textContent = "GPS से जगह ढूँढ रहे हैं…";
+  b.classList.add("locating");
+  b.querySelector("b").textContent = "📡 सैटेलाइट से जगह ढूँढ रहे हैं…";
+  b.querySelector("small").innerHTML = `कुछ सेकंड लगेंगे — खुली जगह में जल्दी मिलती है<span class="acc" id="accLive"></span>`;
   try {
-    const here = await locateHere();
+    const here = await locateHere((acc) => {
+      const el = $("accLive");
+      if (el) el.textContent = `अभी की सटीकता: ±${Math.round(acc)} मी.${acc <= 20 ? " ✓" : " … और सुधार रहे हैं"}`;
+    }, (acc) => {
+      b.querySelector("b").textContent = `✓ जगह मिल गई (±${Math.round(acc)} मी.)`;
+      const el = $("accLive");
+      if (el) el.textContent = "मोहल्ले और शहर का नाम ढूँढ रहे हैं…";
+    });
     pin = here;
     if (here.town) $("town").value = here.town;
     if (here.locality && !$("area").value.trim()) $("area").value = here.locality;
@@ -448,7 +537,9 @@ $("locate").addEventListener("click", async () => {
     toast(err.message + " — शहर और जगह हाथ से लिखिए।", "bad");
   } finally {
     b.disabled = false;
+    b.classList.remove("locating");
     b.querySelector("b").textContent = pin ? "जगह दोबारा लें" : "मेरी सटीक जगह जोड़ें";
+    b.querySelector("small").textContent = "फ़ोन की GPS से — अधिकारी ठीक उसी जगह पहुँचेंगे";
   }
 });
 

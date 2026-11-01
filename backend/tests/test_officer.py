@@ -254,3 +254,26 @@ def test_officers_see_the_pin(client, store):
                     location={"lat": 26.31045, "lon": 87.2562, "accuracy": 9})
     queue = client.get("/api/officer/queue", headers=headers(client, "roads.officer", "road-pass")).json()
     assert next(c for c in queue if c["id"] == cid)["location"]["accuracy"] == 9
+
+
+def test_public_dashboard_shows_emergencies_backers_trend_and_before_after(client, store, open_model, tmp_path, monkeypatch):
+    from backend.tests.test_photos import jpeg
+
+    monkeypatch.setattr(main, "photos_dir", lambda: tmp_path / "photos")
+    danger = add(store, urgency="critical", area="Ward 5, Supaul")
+    add(store, status="merged", duplicate_of=danger, area="Ward 5, Supaul")
+    add(store, status="merged", duplicate_of=danger, area="Ward 5, Supaul")
+    fixed = store.add(text="gaddha", area="Ward 9, Supaul", has_photo=True, status="open", category="roads",
+                      urgency="medium", duplicate_of=None, decision={"title_hi": TITLE}, trace=[])
+    h = headers(client, "roads.officer", "road-pass")
+    uid = client.post(f"/api/officer/complaints/{fixed}/status", headers=h,
+                      json={"status": "resolved", "note": "bhar diya"}).json()["update_id"]
+    client.post(f"/api/officer/updates/{uid}/photo", headers=h, files={"photo": ("w.jpg", jpeg(), "image/jpeg")})
+
+    s = client.get("/api/public/stats").json()
+    assert [e["id"] for e in s["emergency"]] == [danger] and s["emergency"][0]["supporters"] == 3
+    assert [m["id"] for m in s["most_reported"]] == [danger]
+    assert s["by_category"]["roads"]["reports"] == 4 and s["by_category"]["roads"]["total"] == 2
+    assert len(s["trend"]) == 14 and s["trend"][-1] == {"day": s["trend"][-1]["day"], "filed": 4, "fixed": 1}
+    solved = s["solved"][0]
+    assert solved["id"] == fixed and solved["has_photo"] and solved["proof_update"] == uid and solved["fix_days"] == 0.0

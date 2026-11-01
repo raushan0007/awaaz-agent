@@ -176,7 +176,7 @@ export function plusCode(lat, lon) {
 export const mapLink = (loc) => `https://www.google.com/maps?q=${loc.lat},${loc.lon}`;
 
 /** The best GPS fix within a few seconds: stops early once it is within 20 m. */
-function bestFix(ms = 9000) {
+function bestFix(ms = 9000, onProgress) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) { reject(new Error("इस फ़ोन/ब्राउज़र में लोकेशन नहीं मिलती")); return; }
     let best = null;
@@ -187,6 +187,7 @@ function bestFix(ms = 9000) {
     };
     const id = navigator.geolocation.watchPosition((p) => {
       if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+      onProgress?.(best.coords.accuracy);
       if (p.coords.accuracy <= 20) done();
     }, (err) => { if (!best) { navigator.geolocation.clearWatch(id); clearTimeout(timer); reject(new Error(
       err.code === 1 ? "लोकेशन की अनुमति नहीं मिली" : "लोकेशन नहीं मिल पाई")); } },
@@ -200,8 +201,9 @@ function bestFix(ms = 9000) {
  * town, and the road or neighbourhood when OpenStreetMap knows one. The coordinates go once to
  * OpenStreetMap's public reverse geocoder for the names.
  */
-export async function locateHere() {
-  const { coords } = await bestFix();
+export async function locateHere(onProgress, onNaming) {
+  const { coords } = await bestFix(9000, onProgress);
+  onNaming?.(coords.accuracy);
   const here = { lat: coords.latitude, lon: coords.longitude, accuracy: Math.round(coords.accuracy) };
   here.plus = plusCode(here.lat, here.lon);
   try {
@@ -221,6 +223,57 @@ export async function locateTown() {
   const here = await locateHere();
   if (!here.town) throw new Error("शहर का नाम नहीं मिला");
   return here.town;
+}
+
+// --- charts drawn as SVG, with the motion in CSS ------------------------------------------------------
+
+const SLICE_COLOURS = [
+  ["open", "दर्ज, बाकी", "#7aa7ff"],
+  ["in_progress", "काम चल रहा", "#ffb347"],
+  ["resolved", "हल हुईं", "#46dc5f"],
+];
+
+/** Status ring: each arc grows in from zero. */
+export function donutSvg(byStatus) {
+  const parts = SLICE_COLOURS.map(([k, label, colour]) => [label, colour, byStatus[k] || 0]).filter(([, , v]) => v);
+  const total = parts.reduce((s, [, , v]) => s + v, 0);
+  if (!total) return `<p class="status">अभी कोई शिकायत नहीं।</p>`;
+  const r = 52, c = 2 * Math.PI * r;
+  let offset = 0;
+  const arcs = parts.map(([, colour, v], i) => {
+    const len = (v / total) * c;
+    const arc = `<circle class="arc" r="${r}" cx="70" cy="70" fill="none" stroke="${colour}" stroke-width="18"
+      style="--len:${len.toFixed(1)};animation-delay:${i * 0.25}s" stroke-dashoffset="${(-offset).toFixed(1)}" transform="rotate(-90 70 70)"/>`;
+    offset += len;
+    return arc;
+  }).join("");
+  return `<svg class="donut" viewBox="0 0 140 140" role="img" aria-label="${total} समस्याएँ">
+      <circle r="${r}" cx="70" cy="70" fill="none" stroke="rgba(255,255,255,.07)" stroke-width="18"/>${arcs}
+      <text x="70" y="72" text-anchor="middle" font-size="30" font-weight="800">${total}</text>
+      <text x="70" y="92" text-anchor="middle" font-size="12" opacity=".6">समस्याएँ</text></svg>
+    <ul class="legend">${parts.map(([label, colour, v]) => `<li><i style="background:${colour}"></i>${label} <b>${v}</b></li>`).join("")}</ul>`;
+}
+
+/** Filed (saffron) and fixed (green) per day: two lines that draw themselves over shaded areas. */
+export function trendSvg(series) {
+  const W = 640, H = 200, L = 28, B = 22, T = 10;
+  const max = Math.max(2, ...series.map((d) => Math.max(d.filed, d.fixed)));
+  const x = (i) => L + (i * (W - L - 8)) / Math.max(1, series.length - 1);
+  const y = (v) => H - B - (v * (H - B - T)) / max;
+  const line = (k) => series.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(d[k]).toFixed(1)}`).join(" ");
+  const area = (k) => `${line(k)} L${x(series.length - 1).toFixed(1)} ${H - B} L${L} ${H - B}Z`;
+  const every = Math.ceil(series.length / 5);
+  const labels = series.map((d, i) => (i % every === 0 || i === series.length - 1)
+    ? `<text x="${x(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${new Date(d.day).toLocaleDateString("hi-IN", { day: "numeric", month: "short" })}</text>` : "").join("");
+  const dots = series.map((d, i) => d.filed ? `<circle cx="${x(i).toFixed(1)}" cy="${y(d.filed).toFixed(1)}" r="3" fill="#ff9a2e"/>` : "").join("");
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
+    <defs><linearGradient id="hr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9a2e" stop-opacity=".35"/><stop offset="1" stop-color="#ff9a2e" stop-opacity="0"/></linearGradient>
+    <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#46dc5f" stop-opacity=".3"/><stop offset="1" stop-color="#46dc5f" stop-opacity="0"/></linearGradient></defs>
+    <g class="grid">${[0, Math.ceil(max / 2), max].map((t) => `<line x1="${L}" x2="${W}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`).join("")}</g>
+    <path d="${area("filed")}" fill="url(#hr)"/><path d="${area("fixed")}" fill="url(#hg)"/>
+    <path class="rcv draw" d="${line("filed")}" fill="none" stroke-width="2.5" stroke-linejoin="round"/>
+    <path class="rsv draw" d="${line("fixed")}" fill="none" stroke-width="2.5" stroke-linejoin="round"/>
+    ${dots}${labels}</svg>`;
 }
 
 // --- how complete a report is, and the citizen's own tickets on this phone ---------------------------
