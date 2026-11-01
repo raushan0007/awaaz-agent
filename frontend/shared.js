@@ -58,7 +58,7 @@ const LOGO = `<svg viewBox="0 0 48 48" aria-hidden="true">
     <path d="M38 18a10 10 0 0 1 0 12" stroke="#138808"/><path d="M42.5 14.5a15 15 0 0 1 0 19" stroke="#138808"/></g></svg>`;
 
 const PAGES = [
-  ["citizen", "/", "🎙️", "शिकायत करें"],
+  ["citizen", "/#complain", "🎙️", "शिकायत करें"],
   ["track", "/track.html", "🔎", "हाल देखें"],
   ["officer", "/officer.html", "🏛️", "अधिकारी"],
 ];

@@ -24,6 +24,7 @@
         <div class="stat"><b id="sDays">–</b><span>दिन में औसत समाधान</span></div>
       </div>
       <div class="live"><i></i>आज: <b id="tFiled">0</b> आईं · <b id="tFixed">0</b> हल हुईं</div>
+      <a class="hero-cta" href="#complain">📣 अभी शिकायत करें <span>↓</span></a>
       <div class="place-bar" id="placeBar">
         <button class="place on" type="button" data-place="">🗺️ पूरा भारत</button>
         <button class="place near" type="button" id="nearMe">📍 मेरे आस-पास</button>
@@ -48,39 +49,69 @@
       <div class="marquee" aria-hidden="true"><div class="marquee-track" id="depts"></div></div>
     </div>
 
-    <section class="card voice glow-card reveal">
-      <span class="eyebrow">आवाज़ से शिकायत</span>
-      <div class="mic-wrap" id="micWrap">
-        <button id="mic" class="mic" aria-label="रिकॉर्डिंग शुरू करें">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
-        </button>
+    <section class="card complain glow-card" id="complain">
+      <div class="complain-head">
+        <span class="eyebrow">नई शिकायत</span>
+        <h2>अपनी शिकायत दर्ज करें</h2>
+        <ol class="steps-mini" id="stepsMini">
+          <li data-step="say">① बोलिए</li><li data-step="where">② जगह</li><li data-step="photo">③ फ़ोटो</li><li data-step="send">④ भेजिए</li>
+        </ol>
       </div>
-      <canvas id="meter" width="640" height="64" aria-hidden="true"></canvas>
-      <p id="micStatus" class="status">दबाकर बोलिए। दोबारा दबाने पर रुकेगा।</p>
-      <label class="check"><input id="keepSample" type="checkbox" checked> रिकॉर्डिंग टेस्ट सैंपल के रूप में सेव करें (सिर्फ़ इसी कंप्यूटर पर)</label>
-      <div id="sampleInfo" class="sample" hidden></div>
-      <audio id="playback" controls hidden></audio>
 
-      <div class="or">या लिखिए</div>
-      <div style="text-align:left">
-        <label for="text" style="margin-top:0">आपकी शिकायत</label>
-        <textarea id="text" rows="4" placeholder="जैसे: हमारे मोहल्ले में 3 दिन से बिजली नहीं है, ट्रांसफ़ॉर्मर जल गया है…"></textarea>
-        <div class="examples" id="examples"><small>उदाहरण आज़माइए:</small></div>
+      <!-- ① say it -->
+      <div class="step-block">
+        <h3><span class="num">1</span>समस्या बोलिए या लिखिए</h3>
+        <div class="rec" id="rec" data-state="idle">
+          <button id="mic" class="mic" type="button" aria-label="बोलना शुरू करें">
+            <svg class="i-mic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0H5a7 7 0 0 0 6 6.92V21h2v-2.08A7 7 0 0 0 19 12h-2Z"/></svg>
+            <svg class="i-stop" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2.5"/></svg>
+            <span class="spin" aria-hidden="true"></span>
+          </button>
+          <div class="rec-text">
+            <b id="recTitle">🎙️ दबाइए और बोलिए</b>
+            <span id="recSub">बोलना पूरा हो जाए तो वही बटन दोबारा दबाएँ · 2 मिनट तक</span>
+            <span class="rec-time" id="recTime" hidden><i></i><b id="recClock">0:00</b> / 2:00</span>
+          </div>
+        </div>
+        <canvas id="meter" width="640" height="56" aria-hidden="true"></canvas>
+        <div class="rec-after" id="recAfter" hidden>
+          <button type="button" class="ghost" id="redo">🔁 दोबारा बोलें</button>
+          <audio id="playback" controls></audio>
+        </div>
+        <p id="micStatus" class="status" role="status"></p>
+        <label class="check"><input id="keepSample" type="checkbox" checked> रिकॉर्डिंग टेस्ट सैंपल के रूप में सेव करें (सिर्फ़ इसी कंप्यूटर पर)</label>
+        <div id="sampleInfo" class="sample" hidden></div>
 
-        <label for="town">शहर / ज़िला</label>
-        <div class="row">
-          <input id="town" type="text" maxlength="40" list="placeList" autocomplete="address-level2" placeholder="जैसे: Supaul, Patna, Gaya…">
-          <button class="locate" type="button" id="locate" title="फ़ोन की लोकेशन से शहर भरें">📍 मेरी जगह</button>
+        <label for="text" class="sub-label">आपकी शिकायत <small class="hint">— बोला हुआ यहाँ लिख जाएगा, ज़रूरत हो तो सुधारें</small></label>
+        <textarea id="text" rows="4" placeholder="या यहाँ लिखिए: हमारे मोहल्ले में 3 दिन से बिजली नहीं है, ट्रांसफ़ॉर्मर जल गया है…"></textarea>
+        <div class="examples" id="examples"><small>उदाहरण:</small></div>
+      </div>
+
+      <!-- ② where -->
+      <div class="step-block">
+        <h3><span class="num">2</span>जगह बताइए</h3>
+        <button class="locate-big" type="button" id="locate">
+          <span class="ic">📍</span><span><b>मेरी सटीक जगह जोड़ें</b><small>फ़ोन की GPS से — अधिकारी ठीक उसी जगह पहुँचेंगे</small></span>
+        </button>
+        <div class="pin" id="pin" hidden></div>
+        <div class="two">
+          <div>
+            <label for="town">शहर / ज़िला</label>
+            <input id="town" type="text" maxlength="40" list="placeList" autocomplete="address-level2" placeholder="जैसे: Supaul, Patna, Gaya">
+          </div>
+          <div>
+            <label for="area">मोहल्ला / वार्ड / लैंडमार्क</label>
+            <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 8, बैंक ऑफ़ इंडिया के सामने">
+          </div>
         </div>
         <datalist id="placeList"></datalist>
         <div class="examples" id="townChips"></div>
-        <div class="pin" id="pin" hidden></div>
-        <p class="hint" id="locHint">📍 दबाने पर आपकी सटीक जगह (GPS) शिकायत के साथ जाती है ताकि अधिकारी ठीक उसी जगह पहुँच सकें। यह सिर्फ़ अधिकारी को दिखती है, कभी सार्वजनिक नहीं होती। शहर/मोहल्ले का नाम जानने के लिए OpenStreetMap से पूछा जाता है।</p>
+        <p class="hint" id="locHint">🔒 सटीक जगह सिर्फ़ अधिकारी को दिखती है, कभी सार्वजनिक नहीं होती। मोहल्ले का नाम जानने के लिए OpenStreetMap से पूछा जाता है।</p>
+      </div>
 
-        <label for="area">जगह (वार्ड / मोहल्ला / चौक)</label>
-        <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 8, सुभाष चौक, बैंक ऑफ़ इंडिया के सामने">
-
-        <span class="label">फ़ोटो <small class="hint">(ज़रूरी नहीं, पर मदद करती है)</small></span>
+      <!-- ③ photo -->
+      <div class="step-block">
+        <h3><span class="num">3</span>फ़ोटो <small class="hint">(ज़रूरी नहीं, पर मदद करती है)</small></h3>
         <div class="photo-pick">
           <label class="pick-btn" for="photo">📷 फ़ोटो लें या चुनें</label>
           <input id="photo" type="file" accept="image/*" hidden>
@@ -89,11 +120,15 @@
             <button id="photoRemove" type="button" class="link">हटाएँ</button>
           </div>
         </div>
-        <p class="safe">🔒 आपका मोबाइल, आधार नंबर और फ़ोटो की लोकेशन कभी सार्वजनिक नहीं होगी।</p>
+        <p class="hint">🔒 फ़ोटो की लोकेशन और फ़ोन की जानकारी आपके फ़ोन पर ही हटा दी जाती है।</p>
       </div>
 
-      <button id="send" class="send">📣 आवाज़ भेजिए</button>
-      <div id="thinking" class="thinking" hidden><span class="dots"><i></i><i></i><i></i></span><span id="thinkingText"></span></div>
+      <!-- ④ send -->
+      <div class="step-block last">
+        <button id="send" class="send" type="button">📣 आवाज़ भेजिए</button>
+        <div id="thinking" class="thinking" hidden><span class="dots"><i></i><i></i><i></i></span><span id="thinkingText"></span></div>
+        <p class="safe">🔒 आपका मोबाइल और आधार नंबर अपने आप छिप जाते हैं।</p>
+      </div>
     </section>
 
     <section id="result" class="card ticket" hidden></section>
@@ -109,7 +144,7 @@
     </section>
 
     <section class="reveal">
-      <h2 style="font-size:26px;margin-bottom:12px">कैसे काम करता है</h2>
+      <div class="section-head" style="margin-bottom:14px"><span class="kicker"><i></i>तीन आसान कदम</span><h2>कैसे काम करता है</h2></div>
       <div class="steps3">
         <div class="step"><span class="n">1</span><div class="ic">🎙️</div><h3>बोलिए</h3><p>हिंदी, हिंग्लिश या अंग्रेज़ी, जैसे आप बात करते हैं।</p></div>
         <div class="step"><span class="n">2</span><div class="ic">🧠</div><h3>AI समझता है</h3><p>औपचारिक शिकायत, विभाग और ज़रूरत तय करता है; फ़ोटो SAM से जाँचता है।</p></div>

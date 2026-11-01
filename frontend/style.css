@@ -525,3 +525,71 @@ summary { cursor: pointer; font-weight: 700; color: var(--text-2); }
   .trend text { fill: #333; }
   main.wide { max-width: none; padding: 0; }
 }
+
+/* ---------- the complaint form, in four plain steps ---------- */
+#complain { scroll-margin-top: 80px; padding: 0; overflow: hidden; }
+.complain-head { padding: 20px 22px 14px; border-bottom: 1px solid var(--line); background: rgba(255, 255, 255, .02); }
+.complain-head h2 { font-size: 26px; margin: 4px 0 10px; }
+.steps-mini { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; padding: 0; margin: 0; }
+.steps-mini li { padding: 4px 12px; border-radius: 999px; font-size: 14px; font-weight: 700; background: rgba(255, 255, 255, .06); color: var(--muted); border: 1px solid var(--line); transition: .3s; }
+.steps-mini li.done { background: var(--ok-soft); color: var(--ok); border-color: rgba(70, 220, 95, .35); }
+.steps-mini li.done::after { content: " ✓"; }
+.step-block { padding: 18px 22px; border-bottom: 1px dashed var(--line); }
+.step-block.last { border-bottom: 0; }
+.step-block h3 { display: flex; align-items: center; gap: 10px; font-size: 19px; margin-bottom: 12px; }
+.step-block h3 .num { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; background: var(--grad); color: #fff; font-size: 15px; flex: none; }
+.step-block h3 .hint { margin: 0; font-family: var(--body); font-weight: 400; }
+.sub-label { margin-top: 18px; }
+.sub-label .hint { font-weight: 400; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.two label { margin-top: 14px; }
+
+/* the recorder says what to do next, in every state */
+.rec { display: flex; align-items: center; gap: 18px; padding: 16px; border-radius: 20px; background: #091137; border: 1.5px solid var(--line); transition: border-color .3s, background .3s; }
+.rec .mic { width: 84px; height: 84px; flex: none; box-shadow: 0 0 0 8px var(--accent-soft), 0 14px 30px -10px var(--glow); }
+.rec .mic svg { width: 38px; height: 38px; }
+.rec .i-stop, .rec .spin { display: none; }
+.rec-text { display: grid; gap: 2px; min-width: 0; }
+.rec-text > b { font-family: var(--head); font-size: 21px; line-height: 1.25; }
+.rec-text > span { color: var(--text-2); font-size: 15px; }
+.rec-time { display: inline-flex; align-items: center; gap: 6px; font-variant-numeric: tabular-nums; color: var(--bad) !important; font-weight: 700; }
+.rec-time i { width: 10px; height: 10px; border-radius: 50%; background: var(--bad); animation: pulse 1.2s infinite; }
+.rec[data-state="idle"] .mic { animation: invite 2.4s ease-in-out infinite; }
+@keyframes invite { 50% { box-shadow: 0 0 0 16px rgba(255, 154, 46, .08), 0 14px 30px -10px var(--glow); } }
+.rec[data-state="recording"] { border-color: rgba(255, 107, 107, .7); background: rgba(255, 107, 107, .08); }
+.rec[data-state="recording"] .mic { background: linear-gradient(135deg, #ff6b6b, #d6213b); animation: rec-pulse 1.2s ease-out infinite; }
+@keyframes rec-pulse { from { box-shadow: 0 0 0 0 rgba(255, 107, 107, .6); } to { box-shadow: 0 0 0 22px rgba(255, 107, 107, 0); } }
+.rec[data-state="recording"] .i-mic { display: none; }
+.rec[data-state="recording"] .i-stop { display: block; }
+.rec[data-state="busy"] .i-mic { display: none; }
+.rec[data-state="busy"] .spin { display: block; width: 34px; height: 34px; border-radius: 50%; border: 4px solid rgba(255, 255, 255, .35); border-top-color: #fff; animation: spin .8s linear infinite; }
+.rec[data-state="busy"] .mic { cursor: wait; }
+.rec[data-state="done"] { border-color: rgba(70, 220, 95, .55); background: rgba(70, 220, 95, .07); }
+.rec[data-state="done"] .mic { background: var(--grad-green); box-shadow: 0 0 0 8px var(--ok-soft); }
+.rec[data-state="error"] { border-color: rgba(255, 193, 77, .6); }
+.rec-after { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.rec-after audio { flex: 1 1 220px; margin: 0; height: 40px; }
+.ghost { border: 1.5px solid var(--line); background: var(--surface); color: var(--text); border-radius: 12px; padding: 8px 14px; font-weight: 700; cursor: pointer; }
+.ghost:hover { border-color: var(--accent); color: var(--accent); }
+
+/* location first: the exact spot matters more than the name */
+.locate-big { width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; padding: 14px 16px; border-radius: 16px; cursor: pointer;
+  border: 1.5px dashed var(--accent); background: var(--accent-soft); color: var(--text); }
+.locate-big .ic { font-size: 30px; }
+.locate-big b { display: block; font-family: var(--head); font-size: 19px; color: var(--accent); }
+.locate-big small { color: var(--text-2); font-size: 14px; }
+.locate-big:disabled { opacity: .7; cursor: wait; }
+
+.hero-cta { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; padding: 12px 22px; border-radius: 999px; background: var(--grad);
+  color: #fff; font-family: var(--head); font-size: 19px; font-weight: 700; text-decoration: none; box-shadow: 0 14px 30px -12px var(--glow); }
+.hero-cta span { display: inline-block; animation: nudge 1.6s ease-in-out infinite; }
+@keyframes nudge { 50% { transform: translateY(4px); } }
+
+@media (max-width: 760px) {
+  .two { grid-template-columns: 1fr; gap: 0; }
+  .rec { gap: 14px; padding: 14px; }
+  .rec .mic { width: 72px; height: 72px; }
+  .rec-text > b { font-size: 19px; }
+  .step-block, .complain-head { padding-left: 16px; padding-right: 16px; }
+}
+#rec[data-state="idle"] ~ #meter, #rec[data-state="error"] ~ #meter { display: none; }

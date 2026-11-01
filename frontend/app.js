@@ -52,15 +52,29 @@ async function postForm(url, form) {
   return body;
 }
 
-function setRecording(on) {
-  mic.classList.toggle("recording", on);
-  $("micWrap").classList.toggle("recording", on);
-  mic.setAttribute("aria-label", on ? "रिकॉर्डिंग रोकें" : "रिकॉर्डिंग शुरू करें");
+// The recorder always says what to do next: idle -> recording -> busy (writing it down) -> done / error.
+const MAX_SECONDS = 120;
+let clock = null;
+
+function setRec(state, title, sub) {
+  $("rec").dataset.state = state;
+  $("recTitle").textContent = title;
+  $("recSub").textContent = sub;
+  $("recTime").hidden = state !== "recording";
+  $("recSub").hidden = state === "recording";
+  mic.disabled = state === "busy";
+  mic.setAttribute("aria-label", state === "recording" ? "रिकॉर्डिंग रोकें" : "बोलना शुरू करें");
+}
+
+function tick(started) {
+  const s = Math.floor((Date.now() - started) / 1000);
+  $("recClock").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }
 
 async function startRecording() {
   levels.length = 0;
   recorder = new Recorder({
+    maxSeconds: MAX_SECONDS,
     onLevel: (l) => { levels.push(l); requestAnimationFrame(drawMeter); },
     onAutoStop: () => stopRecording(),
   });
@@ -68,40 +82,48 @@ async function startRecording() {
     await recorder.start();
   } catch (err) {
     recorder = null;
-    $("micStatus").textContent = "माइक नहीं मिला या अनुमति नहीं दी गई: " + err.message;
+    setRec("error", "🎙️ माइक की अनुमति दें",
+      "ब्राउज़र में माइक की अनुमति देकर दोबारा दबाएँ — या नीचे लिख दीजिए।");
+    $("micStatus").textContent = err.message;
     return;
   }
-  setRecording(true);
-  $("micStatus").textContent = "सुन रहे हैं… बोलकर माइक दोबारा दबाएँ।";
+  const started = Date.now();
+  tick(started);
+  clock = setInterval(() => tick(started), 250);
+  setRec("recording", "⏹ बोलना पूरा हो तो यही बटन दबाएँ", "");
+  $("micStatus").textContent = "सुन रहे हैं… आराम से, साफ़ बोलिए।";
 }
 
 async function stopRecording() {
   if (!recorder) return;
   const rec = recorder;
   recorder = null;
-  setRecording(false);
-  mic.disabled = true;
-  $("micStatus").textContent = "आवाज़ को टेक्स्ट में बदल रहे हैं…";
+  clearInterval(clock);
+  setRec("busy", "✍️ आपकी बात लिख रहे हैं…", "कुछ सेकंड लगेंगे");
+  $("micStatus").textContent = "";
   try {
     const { blob, seconds } = await rec.stop();
     $("playback").src = URL.createObjectURL(blob);
-    $("playback").hidden = false;
 
     const form = new FormData();
     form.append("audio", blob, "report.wav");
     const { transcript } = await postForm("/api/transcribe", form);
+    if (!transcript) {
+      setRec("error", "🤔 कुछ समझ नहीं आया", "माइक दबाकर दोबारा, थोड़ा पास से और साफ़ बोलिए।");
+      return;
+    }
     const text = $("text");
     text.value = text.value.trim() ? `${text.value.trim()} ${transcript}` : transcript;
-    $("micStatus").textContent = transcript
-      ? `${seconds.toFixed(1)} सेकंड की आवाज़ टेक्स्ट में बदली। ज़रूरत हो तो सुधार लें।`
-      : "कोई शब्द समझ नहीं आए। दोबारा साफ़ बोलिए।";
-    if (transcript) toast("✓ आपकी बात लिख ली गई", "ok");
+    text.dispatchEvent(new Event("input"));
+    setRec("done", "✓ लिख लिया — नीचे जाँच लें", "कुछ और कहना हो तो 🎙️ दोबारा दबाएँ");
+    $("recAfter").hidden = false;
+    $("micStatus").textContent = `${seconds.toFixed(0)} सेकंड की आवाज़ लिखी गई।`;
+    toast("✓ आपकी बात लिख ली गई", "ok");
 
     if ($("keepSample").checked) await keepSample(blob, transcript);
   } catch (err) {
-    $("micStatus").textContent = "गड़बड़ी: " + err.message;
-  } finally {
-    mic.disabled = false;
+    setRec("error", "⚠️ आवाज़ नहीं लिखी जा सकी", "दोबारा दबाकर कोशिश करें, या नीचे लिख दीजिए।");
+    $("micStatus").textContent = err.message;
   }
 }
 
@@ -132,11 +154,13 @@ async function pickPhoto(e) {
   }
   $("photoThumb").src = URL.createObjectURL(photoBlob);
   $("photoPreview").hidden = false;
+  updateSteps();
 }
 
 function removePhoto() {
   photoBlob = null;
   $("photoPreview").hidden = true;
+  updateSteps();
 }
 
 function showResult(c) {
@@ -378,7 +402,7 @@ $("placeBar").addEventListener("click", async (e) => {
 
 $("townChips").addEventListener("click", (e) => {
   const b = e.target.closest("button[data-town]");
-  if (b) $("town").value = b.dataset.town;
+  if (b) { $("town").value = b.dataset.town; updateSteps(); }
 });
 
 // The exact spot: sent with the complaint for officers, never shown publicly.
@@ -402,13 +426,14 @@ function showPin() {
 $("locate").addEventListener("click", async () => {
   const b = $("locate");
   b.disabled = true;
-  b.textContent = "📍 ढूँढ रहे हैं…";
+  b.querySelector("b").textContent = "GPS से जगह ढूँढ रहे हैं…";
   try {
     const here = await locateHere();
     pin = here;
     if (here.town) $("town").value = here.town;
     if (here.locality && !$("area").value.trim()) $("area").value = here.locality;
     showPin();
+    updateSteps();
     if (!here.locality && !$("area").value.trim()) {
       $("area").focus();
       toast("📍 सटीक जगह जुड़ गई। मोहल्ले का नाम नक्शे में नहीं मिला — पास का लैंडमार्क लिख दें।", "ok");
@@ -419,7 +444,7 @@ $("locate").addEventListener("click", async () => {
     toast(err.message + " — शहर और जगह हाथ से लिखिए।", "bad");
   } finally {
     b.disabled = false;
-    b.textContent = "📍 मेरी जगह";
+    b.querySelector("b").textContent = pin ? "जगह दोबारा लें" : "मेरी सटीक जगह जोड़ें";
   }
 });
 
@@ -436,7 +461,27 @@ fetch("/api/health").then((r) => r.json()).then((h) => {
   }
 }).catch(() => {});
 
-mic.addEventListener("click", () => (recorder ? stopRecording() : startRecording()));
+mic.addEventListener("click", () => {
+  if ($("rec").dataset.state === "busy") return;
+  recorder ? stopRecording() : startRecording();
+});
+$("redo").addEventListener("click", () => {
+  $("text").value = "";
+  updateSteps();
+  startRecording();
+});
+
+// The four step chips tick themselves off as the form fills in.
+function updateSteps() {
+  const done = {
+    say: $("text").value.trim().length >= 5,
+    where: !!$("town").value.trim(),
+    photo: !!photoBlob,
+    send: false,
+  };
+  document.querySelectorAll("#stepsMini li").forEach((li) => li.classList.toggle("done", done[li.dataset.step]));
+}
+["text", "town", "area"].forEach((id) => $(id).addEventListener("input", updateSteps));
 $("send").addEventListener("click", send);
 $("photo").addEventListener("change", pickPhoto);
 $("photoRemove").addEventListener("click", removePhoto);
