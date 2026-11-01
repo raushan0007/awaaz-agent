@@ -125,6 +125,13 @@
 
       <!-- ④ send -->
       <div class="step-block last">
+        <h3><span class="num">4</span>भेजिए</h3>
+        <div class="mobile-row">
+          <label for="mobile" style="margin-top:0">📱 मोबाइल नंबर <small class="hint">(ज़रूरी नहीं)</small></label>
+          <input id="mobile" type="tel" inputmode="numeric" maxlength="14" autocomplete="tel" placeholder="98xxxxxxxx">
+          <p class="hint" style="margin:0">🔒 नंबर किसी को नहीं दिखता — न जनता को, न अधिकारी को। इससे आप अपनी सारी शिकायतें कभी भी देख पाएँगे और शिकायत ज़्यादा भरोसेमंद मानी जाएगी।</p>
+        </div>
+        <div class="info-meter" id="infoMeter"></div>
         <button id="send" class="send" type="button">📣 आवाज़ भेजिए</button>
         <div id="thinking" class="thinking" hidden><span class="dots"><i></i><i></i><i></i></span><span id="thinkingText"></span></div>
         <p class="safe">🔒 आपका मोबाइल और आधार नंबर अपने आप छिप जाते हैं।</p>
@@ -141,6 +148,25 @@
       </div>
       <div class="dept-grid" id="deptGrid" style="margin-top:16px"></div>
       <div class="overall" id="overall"></div>
+    </section>
+
+    <section class="reveal">
+      <div class="section-head" style="margin-bottom:14px"><span class="kicker"><i></i>पूरी पारदर्शिता</span>
+        <h2>सब कुछ खुला है — सिर्फ़ आपकी निजी जानकारी नहीं</h2>
+        <p>हर शिकायत का हाल, हर विभाग का जवाब देने का समय, सब सबके सामने।</p></div>
+      <div class="open-box">
+        <div class="pub"><h3>✅ सबको दिखता है</h3><ul>
+          <li>हर शिकायत का शीर्षक, विभाग, ज़रूरत और जगह (मोहल्ला/वार्ड)</li>
+          <li>AI ने कौन-सा विभाग और क्यों चुना</li>
+          <li>हर कदम का समय: कब दर्ज हुई, कब काम शुरू, कब हल</li>
+          <li>विभाग ने कितने घंटे में जवाब दिया, कितनी शिकायतें अनसुनी हैं</li>
+          <li>अधिकारी के अपडेट और काम की फ़ोटो</li></ul></div>
+        <div class="hid"><h3>🔒 किसी को नहीं दिखता</h3><ul>
+          <li>आपका मोबाइल नंबर (अधिकारी को भी नहीं)</li>
+          <li>शिकायत में लिखे मोबाइल, आधार, ईमेल, PAN — अपने आप छिप जाते हैं</li>
+          <li>आपकी सटीक GPS जगह (सिर्फ़ अधिकारी को, मौके पर पहुँचने के लिए)</li>
+          <li>फ़ोटो की लोकेशन और फ़ोन की जानकारी</li></ul></div>
+      </div>
     </section>
 
     <section class="reveal">

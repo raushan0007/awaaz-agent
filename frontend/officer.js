@@ -1,7 +1,7 @@
 import {
   $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mapLink, mountChrome, plusCode,
   shrinkPhoto, STATUS,
-  timeAgo, toast, traceHtml, URGENCY, WAVES,
+  starsHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
 mountChrome("officer");
@@ -239,6 +239,7 @@ function itemHtml(c) {
       ${c.location ? `<a class="badge resolved" href="${mapLink(c.location)}" target="_blank" rel="noopener"
         title="नागरिक के फ़ोन की सटीक जगह">🗺️ नक्शे पर · ${esc(plusCode(c.location.lat, c.location.lon))}${c.location.accuracy != null ? ` · ±${c.location.accuracy} मी.` : ""}</a>` : ""}
       ${c.photo ? `<span class="badge">📷 फ़ोटो</span>` : ""}
+      <span class="badge">${starsHtml(c.info_level)}</span>${c.gave_mobile ? `<span class="badge">📱 मोबाइल दिया</span>` : ""}
     </div>
     ${d.urgency_reason ? `<p class="why">क्यों ${esc(URGENCY[c.urgency] || "")}: ${esc(d.urgency_reason)}</p>` : ""}
     <p class="citizen-text">“${esc(c.text)}”</p>

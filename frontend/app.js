@@ -2,7 +2,7 @@ import { Recorder } from "./recorder.js";
 import {
   $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
   mountChrome, revealOnScroll,
-  shrinkPhoto, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  hoursText, LEVEL, saveTicket, shrinkPhoto, starsHtml, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
 mountChrome("citizen");
@@ -217,6 +217,7 @@ async function send() {
     form.append("text", text);
     form.append("area", $("area").value.trim());
     form.append("town", $("town").value.trim());
+    if ($("mobile").value.trim()) form.append("mobile", $("mobile").value.trim());
     if (pin) {
       form.append("lat", pin.lat);
       form.append("lon", pin.lon);
@@ -225,6 +226,7 @@ async function send() {
     if (photoBlob) form.append("photo", photoBlob, "photo.jpg");
     const c = await postForm("/api/complaints", form);
     showResult(c);
+    showTicket(c);
     loadPublic().catch(() => {});
     loadPlaces().catch(() => {});  // a new town shows up straight away
     toast(c.status === "rejected" ? "शिकायत स्वीकार नहीं हुई" : `✓ शिकायत #${c.id} दर्ज हुई`, c.status === "rejected" ? "bad" : "ok");
@@ -262,10 +264,12 @@ let place = "";  // "" = all of India
 
 function deptCard(key, c) {
   const pct = c.total ? Math.round((100 * c.resolved) / c.total) : 0;
+  const reply = c.avg_reply_hours != null ? `पहला जवाब औसतन ${hoursText(c.avg_reply_hours)} में` : "अभी कोई जवाब नहीं";
   const doing = c.in_progress ? `⏳ ${c.in_progress} पर काम जारी` : c.open ? `🕒 ${c.open} कतार में` : "✅ सब हल";
   return `<div class="dept-card ${pct >= 50 ? "good" : ""}"><div class="ic">${ICON[key] || "📋"}</div>
     <h3>${esc(CATEGORY[key] || key)}</h3><div class="num">${c.resolved}<small> / ${c.total} हल</small></div>
-    <div class="bar"><i style="width:${shownOnce ? pct : 0}%" data-w="${pct}"></i></div><span class="chip">${doing}</span></div>`;
+    <div class="bar"><i style="width:${shownOnce ? pct : 0}%" data-w="${pct}"></i></div><span class="chip">${doing}</span>
+    <span class="reply">⏱️ ${reply}</span></div>`;
 }
 
 function feedCard(r) {
@@ -276,7 +280,7 @@ function feedCard(r) {
       <span class="badge ${esc(r.status)}">${esc(STATUS[r.status] || r.status)}</span></span>
       <small>${esc(timeAgo(r.created_at))}</small></div>
     <h3>${esc(r.title_hi || "शिकायत #" + r.id)}</h3>
-    <small>📍 ${esc(r.area || "")} · #${r.id}${r.supporters > 1 ? ` · 👥 ${r.supporters} लोगों ने बताया` : ""}</small></a>`;
+    <small>📍 ${esc(r.area || "")} · #${r.id}${r.supporters > 1 ? ` · 👥 ${r.supporters} लोगों ने बताया` : ""} · ${starsHtml(r.info_level, false)}</small></a>`;
 }
 
 let demoItems = [];
@@ -420,7 +424,7 @@ function showPin() {
     <a href="${mapLink(pin)}" target="_blank" rel="noopener">नक्शे पर देखें</a>
     <button type="button" class="link" id="pinRemove">हटाएँ</button>
     ${weak ? `<small style="flex-basis:100%">लोकेशन कमज़ोर है — खुली जगह में जाकर 📍 दोबारा दबाएँ, या पास का लैंडमार्क लिखें।</small>` : ""}`;
-  $("pinRemove").addEventListener("click", () => { pin = null; showPin(); });
+  $("pinRemove").addEventListener("click", () => { pin = null; showPin(); updateSteps(); });
 }
 
 $("locate").addEventListener("click", async () => {
@@ -473,6 +477,12 @@ $("redo").addEventListener("click", () => {
 
 // The four step chips tick themselves off as the form fills in.
 function updateSteps() {
+  // what the citizen has given so far, as the stars their report will carry
+  const given = [!!$("mobile").value.trim(), !!pin, !!photoBlob];
+  const level = 1 + given.filter(Boolean).length;
+  const missing = [["📱 मोबाइल", given[0]], ["📍 सटीक जगह", given[1]], ["📷 फ़ोटो", given[2]]].filter(([, g]) => !g).map(([n]) => n);
+  $("infoMeter").innerHTML = `<span>जानकारी: ${starsHtml(level)}</span>` +
+    (missing.length ? `<small>${missing.join(", ")} जोड़ें तो और पक्की होगी — पर इसके बिना भी शिकायत दर्ज होगी।</small>` : `<small>बहुत बढ़िया — अधिकारी को पूरी जानकारी मिलेगी।</small>`);
   const done = {
     say: $("text").value.trim().length >= 5,
     where: !!$("town").value.trim(),
@@ -481,8 +491,52 @@ function updateSteps() {
   };
   document.querySelectorAll("#stepsMini li").forEach((li) => li.classList.toggle("done", done[li.dataset.step]));
 }
-["text", "town", "area"].forEach((id) => $(id).addEventListener("input", updateSteps));
+["text", "town", "area", "mobile"].forEach((id) => $(id).addEventListener("input", updateSteps));
+
+// The ticket, front and centre: big number, copy, share, track. Also kept on this phone.
+function showTicket(c) {
+  const d = c.decision || {};
+  const id = c.duplicate_of || c.id;
+  saveTicket({ id: c.id, title: d.title_hi || "", at: c.created_at });
+  const url = `${location.origin}/track.html?id=${c.id}`;
+  const head = c.status === "rejected"
+    ? ["⚠️", "शिकायत स्वीकार नहीं हुई"]
+    : c.status === "merged" ? ["🤝", `पहले से दर्ज शिकायत #${id} से जोड़ी गई`] : ["✅", "आपकी शिकायत दर्ज हो गई"];
+  const share = `मेरी शिकायत Awaaz पर दर्ज हुई: #${c.id} — ${d.title_hi || ""}. हाल देखें: ${url}`;
+  const back = document.createElement("div");
+  back.className = "sheet-back";
+  back.innerHTML = `<div class="sheet ${esc(c.status)}" role="dialog" aria-modal="true" aria-label="शिकायत संख्या">
+    <div class="sheet-top"><div class="big-tick">${head[0]}</div><small>${esc(head[1])}</small>
+      <div>शिकायत संख्या</div><div class="ticket-big">#${c.id}</div><small>यह नंबर संभालकर रखें</small></div>
+    <div class="sheet-body">
+      ${d.title_hi ? `<b>${esc(d.title_hi)}</b>` : ""}
+      <div class="badges" style="margin:0">
+        ${d.department ? `<span class="badge dept">🏛️ ${esc(d.department.name_hi)}</span>` : ""}
+        ${c.urgency ? `<span class="badge ${esc(c.urgency)}">${esc(URGENCY[c.urgency])}</span>` : ""}
+        <span class="badge">${starsHtml(c.info_level)}</span>
+      </div>
+      <div class="row3">
+        <button type="button" data-act="copy"><span>📋</span>नंबर कॉपी</button>
+        <a href="https://wa.me/?text=${encodeURIComponent(share)}" target="_blank" rel="noopener"><span>💬</span>WhatsApp</a>
+        <a href="/track.html?id=${c.id}"><span>🔎</span>हाल देखें</a>
+      </div>
+      <p class="sheet-note">${c.gave_mobile ? "📱 आपके मोबाइल नंबर से आप अपनी सारी शिकायतें “हाल देखें” पेज पर कभी भी देख सकते हैं।" : "यह शिकायत इस फ़ोन में “मेरी शिकायतें” में भी सेव है।"}</p>
+      <button type="button" class="send" data-act="close" style="margin-top:4px">ठीक है</button>
+    </div></div>`;
+  document.body.append(back);
+  const close = () => back.remove();
+  back.addEventListener("click", async (e) => {
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (e.target === back || act === "close") close();
+    if (act === "copy") {
+      try { await navigator.clipboard.writeText(String(c.id)); toast(`📋 #${c.id} कॉपी हो गया`, "ok"); }
+      catch { toast(`शिकायत संख्या: #${c.id}`); }
+    }
+  });
+  back.querySelector('[data-act="close"]').focus();
+}
 $("send").addEventListener("click", send);
 $("photo").addEventListener("change", pickPhoto);
 $("photoRemove").addEventListener("click", removePhoto);
 drawMeter();
+updateSteps();

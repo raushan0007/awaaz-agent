@@ -29,6 +29,20 @@
       <p id="status" class="status"></p>
     </section>
     <section id="result" class="card ticket" hidden></section>
+
+    <section class="card">
+      <h2>📂 मेरी शिकायतें</h2>
+      <div class="mine" id="mine"></div>
+      <form id="byMobile" style="margin-top:14px">
+        <label for="mob" style="margin-top:0">मोबाइल नंबर से अपनी सारी शिकायतें देखें</label>
+        <div class="row">
+          <input id="mob" type="tel" inputmode="numeric" maxlength="14" placeholder="वही नंबर जो शिकायत में दिया था">
+          <button class="send small" type="submit">खोजें</button>
+        </div>
+        <p class="hint">🔒 नंबर सिर्फ़ मिलान के लिए इस्तेमाल होता है, कहीं सेव या दिखाया नहीं जाता।</p>
+      </form>
+      <div class="mine" id="mineByMobile"></div>
+    </section>
   </main>
   <script type="module" src="track.js"></script>
 </body>

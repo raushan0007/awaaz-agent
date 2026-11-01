@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import threading
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
@@ -80,6 +81,17 @@ class Settings:
         # never on a hosted copy where citizens speak.
         samples = os.environ.get("AWAAZ_SAMPLES_DIR", "")
         self.samples_dir = Path(samples) if samples else None
+
+    @property
+    def contact_salt(self) -> str:
+        """Secret mixed into mobile-number fingerprints: from the environment, else made once per data folder."""
+        if os.environ.get("AWAAZ_CONTACT_SALT"):
+            return os.environ["AWAAZ_CONTACT_SALT"]
+        path = self.data_dir / "contact.salt"
+        if not path.exists():
+            self.data_dir.mkdir(parents=True, exist_ok=True)
+            path.write_text(secrets.token_hex(16), encoding="utf-8")
+        return path.read_text(encoding="utf-8").strip()
 
 
 settings = Settings()

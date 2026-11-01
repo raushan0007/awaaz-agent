@@ -1,4 +1,5 @@
 import json
+import sqlite3
 
 import pytest
 from fastapi.testclient import TestClient
@@ -312,3 +313,44 @@ def test_exact_location_reaches_officers_but_never_the_public(tmp_path, monkeypa
         assert "26.31" not in client.get(path).text, path
     for bad in [{"lat": "26.3"}, {"lat": "51.5", "lon": "-0.1"}, {"lat": "26.3", "lon": "87.2", "accuracy": "-5"}]:
         assert client.post("/api/complaints", data={"text": "naali jam hai", "town": "Forbesganj", **bad}).status_code == 400
+
+
+def test_mobile_is_kept_only_as_a_fingerprint_and_finds_own_tickets(tmp_path, monkeypatch):
+    from backend.app.privacy import info_level, normalize_mobile
+
+    store = Store(tmp_path / "a.db")
+    monkeypatch.setattr(main, "_store", store)
+    monkeypatch.setattr(config.settings, "data_dir", tmp_path)
+
+    async def fake_run(self, report):
+        return agent.AgentResult("open", {**decision(area="Ward 5, Supaul"), "department": {}}, [])
+
+    monkeypatch.setattr(ComplaintAgent, "run", fake_run)
+    client = TestClient(main.app)
+    base = {"text": "sadak tooti hai", "town": "Supaul"}
+    assert client.post("/api/complaints", data={**base, "mobile": "12345"}).status_code == 400
+    mine = client.post("/api/complaints", data={**base, "mobile": "+91 98765-43210"}).json()
+    other = client.post("/api/complaints", data=base).json()
+    assert (mine["gave_mobile"], mine["info_level"]) == (True, 2)
+    assert (other["gave_mobile"], other["info_level"]) == (False, 1)  # accepted all the same
+    raw = sqlite3.connect(tmp_path / "a.db").execute("SELECT * FROM complaints").fetchall()
+    assert "9876543210" not in str(raw) and "98765" not in str(raw)
+    for path in ["/api/complaints", f"/api/complaints/{mine['id']}", f"/api/complaints/{mine['id']}/track", "/api/public/stats"]:
+        assert "9876543210" not in client.get(path).text
+    found = client.post("/api/my-complaints", json={"mobile": "09876543210"}).json()
+    assert [t["id"] for t in found] == [mine["id"]]
+    assert client.post("/api/my-complaints", json={"mobile": "9123456789"}).json() == []
+    assert client.post("/api/my-complaints", json={"mobile": "0000000000"}).status_code == 400
+    assert normalize_mobile("919876543210") == "9876543210" and normalize_mobile("5876543210") is None
+    assert info_level(True, True, True) == 4
+
+
+def test_tracking_shows_why_and_how_complete(tmp_path, monkeypatch):
+    store = Store(tmp_path / "a.db")
+    monkeypatch.setattr(main, "_store", store)
+    cid = store.add(text="taar gira", area="Ward 8, Supaul", has_photo=True, status="open", category="electricity",
+                    urgency="critical", duplicate_of=None, trace=[],
+                    decision={**decision(), "urgency_reason": "Live wire on the road"}, location=SULTAN_POKHAR)
+    t = TestClient(main.app).get(f"/api/complaints/{cid}/track").json()
+    assert t["urgency_reason"] == "Live wire on the road" and t["info_level"] == 3 and t["pinned"] is True
+    assert t["area"] == "Ward 8, Supaul" and "26.31" not in str(t)

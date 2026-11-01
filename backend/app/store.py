@@ -13,6 +13,8 @@ IST = timezone(timedelta(hours=5, minutes=30))
 from pathlib import Path
 from typing import Any
 
+from .privacy import info_level
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS complaints (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,7 +62,9 @@ LATER_COLUMNS = {
     # lat/lon/loc_accuracy: the phone's position, only when the citizen tapped 📍. Officers see it; the
     # public endpoints never do.
     "complaints": {"photo": "TEXT", "evidence": "TEXT", "masked": "TEXT",
-                   "lat": "REAL", "lon": "REAL", "loc_accuracy": "REAL"},
+                   "lat": "REAL", "lon": "REAL", "loc_accuracy": "REAL",
+                   # salted fingerprint of the mobile number, if one was given; the number itself is never kept
+                   "contact_hash": "TEXT"},
     "updates": {"photo": "TEXT"},  # the officer's photo of the work, if any
 }
 JSON_COLUMNS = ("decision", "photo", "evidence", "masked")
@@ -124,18 +128,18 @@ class Store:
     def add(self, *, text: str, area: str, has_photo: bool, status: str, category: str | None,
             urgency: str | None, duplicate_of: int | None, decision: dict | None, trace: list,
             evidence: dict | None = None, masked: list[str] | None = None,
-            location: dict | None = None) -> int:
+            location: dict | None = None, contact: str | None = None) -> int:
         loc = location or {}
         with self._lock, self._db:
             cur = self._db.execute(
                 "INSERT INTO complaints (created_at, text, area, area_key, has_photo, status, category,"
-                " urgency, duplicate_of, decision, trace, evidence, masked, lat, lon, loc_accuracy)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " urgency, duplicate_of, decision, trace, evidence, masked, lat, lon, loc_accuracy, contact_hash)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     text, area, area_key(area), int(has_photo), status, category, urgency, duplicate_of,
                     _dump(decision), json.dumps(trace, ensure_ascii=False), _dump(evidence),
-                    json.dumps(masked or []), loc.get("lat"), loc.get("lon"), loc.get("accuracy"),
+                    json.dumps(masked or []), loc.get("lat"), loc.get("lon"), loc.get("accuracy"), contact,
                 ),
             )
             return cur.lastrowid
@@ -411,7 +415,8 @@ class Store:
         """What the home page shows anyone, for all of India or one town: counts, per-department progress
         and the latest problems. Titles, places and status only, never report text or photos."""
         rows = self._db.execute(
-            "SELECT id, created_at, area, area_key, status, category, urgency, duplicate_of, decision FROM complaints"
+            "SELECT id, created_at, area, area_key, status, category, urgency, duplicate_of, decision,"
+            " contact_hash IS NOT NULL AS gave_mobile, lat IS NOT NULL AS pinned, has_photo FROM complaints"
             " WHERE status NOT IN ('rejected', 'needs_review') ORDER BY id DESC"
         ).fetchall()
         if place:
@@ -421,6 +426,9 @@ class Store:
         fixed_at = dict(self._db.execute(
             "SELECT complaint_id, MIN(created_at) FROM updates WHERE status = 'resolved' GROUP BY complaint_id"
         ).fetchall())
+        first_reply = dict(self._db.execute(
+            "SELECT complaint_id, MIN(created_at) FROM updates GROUP BY complaint_id").fetchall())
+        hours = lambda a, b: (datetime.fromisoformat(b) - datetime.fromisoformat(a)).total_seconds() / 3600  # noqa: E731
         days = [
             (datetime.fromisoformat(fixed_at[r["id"]]) - datetime.fromisoformat(r["created_at"])).total_seconds() / 86400
             for r in problems if r["status"] == "resolved" and r["id"] in fixed_at
@@ -431,9 +439,16 @@ class Store:
         by_category: dict[str, dict[str, int]] = {}
         for r in problems:
             by_status[r["status"]] = by_status.get(r["status"], 0) + 1
-            c = by_category.setdefault(r["category"] or "other", {"total": 0, "open": 0, "in_progress": 0, "resolved": 0})
+            c = by_category.setdefault(r["category"] or "other",
+                                       {"total": 0, "open": 0, "in_progress": 0, "resolved": 0, "_replies": []})
             c["total"] += 1
             c[r["status"]] = c.get(r["status"], 0) + 1
+            if r["id"] in first_reply:
+                c["_replies"].append(hours(r["created_at"], first_reply[r["id"]]))
+        for c in by_category.values():
+            replies = c.pop("_replies")
+            # Public accountability: how long a department takes to answer at all, and how many wait unanswered.
+            c["avg_reply_hours"] = round(sum(replies) / len(replies), 1) if replies else None
         return {
             "place": place,
             "reports": len(rows),
@@ -453,6 +468,7 @@ class Store:
                 {
                     "id": r["id"], "created_at": r["created_at"], "area": r["area"], "status": r["status"],
                     "category": r["category"], "urgency": r["urgency"], "supporters": self.supporters(r["id"]),
+                    "info_level": info_level(bool(r["gave_mobile"]), bool(r["pinned"]), bool(r["has_photo"])),
                     "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", ""),
                 }
                 for r in problems[:recent]
@@ -496,4 +512,15 @@ class Store:
         d["trace"] = json.loads(d["trace"]) if d["trace"] else []
         lat, lon, acc = d.pop("lat", None), d.pop("lon", None), d.pop("loc_accuracy", None)
         d["location"] = {"lat": lat, "lon": lon, "accuracy": acc} if lat is not None else None
+        d["gave_mobile"] = bool(d.pop("contact_hash", None))
+        d["info_level"] = info_level(d["gave_mobile"], lat is not None, d["has_photo"])
         return d
+
+    def by_contact(self, contact: str, limit: int = 50) -> list[dict[str, Any]]:
+        """A citizen's own complaints, found by the fingerprint of their mobile number."""
+        rows = self._db.execute(
+            "SELECT id, created_at, status, category, duplicate_of, decision FROM complaints"
+            " WHERE contact_hash = ? ORDER BY id DESC LIMIT ?", (contact, limit)).fetchall()
+        return [{"id": r["id"], "created_at": r["created_at"], "status": r["status"], "category": r["category"],
+                 "merged_into": r["duplicate_of"],
+                 "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", "")} for r in rows]

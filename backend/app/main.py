@@ -21,7 +21,7 @@ from .config import BudgetExceeded, settings
 from .departments import CATEGORIES, DEPARTMENTS, MAX_TOWN_CHARS
 from .meta_client import transcribe_wav
 from .photos import PhotoError, clean_photo
-from .privacy import mask_pii
+from .privacy import contact_hash, mask_pii, normalize_mobile
 from .store import Store
 from .vision import segment_image
 
@@ -141,6 +141,7 @@ async def file_complaint(
     text: str = Form(...), area: str = Form(""), town: str = Form(""),
     photo: UploadFile | None = File(None),
     lat: float | None = Form(None), lon: float | None = Form(None), accuracy: float | None = Form(None),
+    mobile: str = Form(""),
 ) -> dict:
     text, area = text.strip(), area.strip()
     town = " ".join(town.split())
@@ -163,6 +164,12 @@ async def file_complaint(
             raise HTTPException(400, "Location accuracy must be 0 to 5000 metres.")
         location = {"lat": round(lat, 6), "lon": round(lon, 6),
                     "accuracy": round(accuracy) if accuracy is not None else None}
+    contact = None
+    if mobile.strip():
+        number = normalize_mobile(mobile)
+        if number is None:
+            raise HTTPException(400, "Give a 10-digit Indian mobile number, or leave it empty.")
+        contact = contact_hash(number, settings.contact_salt)  # only the fingerprint is kept
     report = Report(text=text, area=area, town=town, location=location)
     photo_info = None
     if photo is not None and photo.filename:
@@ -194,6 +201,7 @@ async def file_complaint(
         evidence=result.evidence,
         masked=hidden,
         location=location,
+        contact=contact,
     )
     if photo_info:
         photos_dir().mkdir(parents=True, exist_ok=True)
@@ -259,13 +267,34 @@ def track_complaint(complaint_id: int) -> dict:
         "id": c["id"],
         "merged_into": c["duplicate_of"],
         "created_at": c["created_at"],
+        "filed_at": main_c["created_at"],
         "status": main_c["status"],
         "title_hi": decision.get("title_hi", ""),
         "department_hi": dept["name_hi"] if dept else "",
+        "category": main_c["category"],
+        "area": main_c["area"],
         "urgency": main_c["urgency"],
+        "urgency_reason": decision.get("urgency_reason", ""),
+        "info_level": c["info_level"],
+        "gave_mobile": c["gave_mobile"],
+        "has_photo": c["has_photo"],
+        "pinned": c["location"] is not None,
         "supporters": store.supporters(main_c["id"]),
         "updates": store.updates(main_c["id"]),
     }
+
+
+class MobileBody(BaseModel):
+    mobile: str = Field(min_length=10, max_length=20)
+
+
+@app.post("/api/my-complaints")
+def my_complaints(body: MobileBody) -> list[dict]:
+    """A citizen's own tickets, found by the mobile number they gave (POST, so it never sits in a URL)."""
+    number = normalize_mobile(body.mobile)
+    if number is None:
+        raise HTTPException(400, "Give a 10-digit Indian mobile number.")
+    return get_store().by_contact(contact_hash(number, settings.contact_salt))
 
 
 # --- officers ---------------------------------------------------------------------------------------

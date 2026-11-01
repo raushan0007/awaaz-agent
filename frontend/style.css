@@ -250,7 +250,7 @@ audio { width: 100%; margin-top: 12px; }
 /* ---------- form ---------- */
 label, .label { display: block; font-weight: 700; margin: 16px 0 8px; font-size: 16px; }
 .card > label:first-child, .card > .label:first-child { margin-top: 0; }
-textarea, input[type=text], input[type=password], select {
+textarea, input[type=text], input[type=password], input[type=tel], select {
   width: 100%; padding: 13px 14px; border-radius: 14px; border: 1.5px solid var(--line);
   background: #091137; color: var(--text); transition: border-color .15s, box-shadow .15s;
 }
@@ -593,3 +593,48 @@ summary { cursor: pointer; font-weight: 700; color: var(--text-2); }
   .step-block, .complain-head { padding-left: 16px; padding-right: 16px; }
 }
 #rec[data-state="idle"] ~ #meter, #rec[data-state="error"] ~ #meter { display: none; }
+
+/* ---------- trust and transparency ---------- */
+.stars { color: #ffc14d; letter-spacing: 1px; font-weight: 700; white-space: nowrap; }
+.stars i { font-style: normal; color: rgba(255, 255, 255, .2); }
+.stars.l4 { color: var(--ok); }
+.info-meter { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 12px; padding: 10px 14px; border-radius: 14px; background: #091137; border: 1px solid var(--line); font-size: 15px; }
+.info-meter small { color: var(--muted); }
+.mobile-row { display: grid; grid-template-columns: 1fr; gap: 6px; }
+.mobile-row input { letter-spacing: 1px; }
+
+/* the ticket popup */
+.sheet-back { position: fixed; inset: 0; z-index: 60; background: rgba(3, 6, 25, .72); backdrop-filter: blur(4px); display: grid; place-items: center; padding: 16px; animation: fade .2s ease-out; }
+@keyframes fade { from { opacity: 0; } }
+.sheet { width: min(460px, 100%); max-height: calc(100vh - 32px); overflow: auto; border-radius: 24px; background: linear-gradient(180deg, var(--surface-2), var(--surface)); border: 1px solid var(--line); box-shadow: var(--shadow-lg); animation: rise .3s ease-out; }
+.sheet-top { padding: 22px 22px 18px; text-align: center; background: var(--grad-green); color: #fff; }
+.sheet.merged .sheet-top { background: linear-gradient(135deg, #3b55d6, #1a2a8a); }
+.sheet.rejected .sheet-top { background: linear-gradient(135deg, #5a5f80, #2b2f4d); }
+.sheet-top .big-tick { font-size: 40px; line-height: 1; }
+.sheet-top small { display: block; opacity: .9; font-weight: 600; margin-top: 6px; }
+.ticket-big { font-family: var(--head); font-size: 64px; line-height: 1; margin: 6px 0 2px; letter-spacing: 1px; }
+.sheet-body { padding: 18px 22px 22px; display: grid; gap: 12px; }
+.sheet-body .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.sheet-body .row3 a, .sheet-body .row3 button { display: grid; justify-items: center; gap: 2px; padding: 10px 6px; border-radius: 14px; border: 1px solid var(--line); background: #091137; color: var(--text); text-decoration: none; font-weight: 700; font-size: 14px; cursor: pointer; }
+.sheet-body .row3 span { font-size: 22px; }
+.sheet-note { font-size: 14px; color: var(--text-2); margin: 0; }
+
+/* public / hidden */
+.open-box { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.open-box > div { padding: 16px; border-radius: 18px; border: 1px solid var(--line); background: linear-gradient(180deg, var(--surface-2), var(--surface)); }
+.open-box h3 { font-size: 18px; margin-bottom: 8px; }
+.open-box ul { margin: 0; padding-left: 20px; display: grid; gap: 4px; color: var(--text-2); font-size: 15px; }
+.open-box .pub h3 { color: var(--ok); }
+.open-box .hid h3 { color: var(--accent); }
+
+/* tracking: the decision and the clock */
+.decision { padding: 14px; border-radius: 16px; background: #091137; border: 1px solid var(--line); display: grid; gap: 6px; font-size: 15px; }
+.decision b { color: var(--text); }
+.decision .why-en { color: var(--muted); font-style: italic; }
+.no-reply { padding: 12px 14px; border-radius: 14px; background: var(--bad-soft); color: var(--bad); font-weight: 700; border: 1px solid rgba(255, 107, 107, .4); }
+.timeline .gap { display: inline-block; margin-left: 6px; font-size: 13px; color: var(--muted); }
+.mine { display: grid; gap: 8px; }
+.mine a { display: flex; justify-content: space-between; gap: 10px; padding: 10px 14px; border-radius: 14px; background: #091137; border: 1px solid var(--line); color: var(--text); text-decoration: none; }
+.mine a b { color: var(--accent); }
+.dept-card .reply { display: block; font-size: 12px; color: var(--muted); margin: 6px 0 0; }
+@media (max-width: 760px) { .open-box { grid-template-columns: 1fr; } .ticket-big { font-size: 56px; } }

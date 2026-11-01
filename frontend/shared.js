@@ -223,6 +223,37 @@ export async function locateTown() {
   return here.town;
 }
 
+// --- how complete a report is, and the citizen's own tickets on this phone ---------------------------
+
+export const LEVEL = { 1: "कम जानकारी", 2: "थोड़ी जानकारी", 3: "अच्छी जानकारी", 4: "पूरी जानकारी" };
+
+/** ★★★☆ — how much a report carries (mobile, exact spot, photo). Every level is accepted. */
+export function starsHtml(level, withLabel = true) {
+  const n = Math.max(1, Math.min(4, level || 1));
+  return `<span class="stars l${n}" title="जानकारी: ${LEVEL[n]}">${"★".repeat(n)}<i>${"★".repeat(4 - n)}</i>${withLabel ? ` ${LEVEL[n]}` : ""}</span>`;
+}
+
+const MINE = "awaaz-my-tickets";
+
+export function myTickets() {
+  try { return JSON.parse(localStorage.getItem(MINE) || "[]"); } catch { return []; }
+}
+
+export function saveTicket(t) {
+  try {
+    const list = myTickets().filter((x) => x.id !== t.id);
+    list.unshift({ id: t.id, title: t.title, at: t.at });
+    localStorage.setItem(MINE, JSON.stringify(list.slice(0, 30)));
+  } catch { /* private mode: the popup still shows the number */ }
+}
+
+export function hoursText(h) {
+  if (h == null) return "–";
+  if (h < 1) return "1 घंटे से कम";
+  if (h < 48) return `${Math.round(h)} घंटे`;
+  return `${Math.round(h / 24)} दिन`;
+}
+
 export function timeAgo(iso) {
   const hours = (Date.now() - new Date(iso)) / 36e5;
   if (hours < 1) return "अभी";
