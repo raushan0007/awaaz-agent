@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+from datetime import datetime, timezone
 from pathlib import Path
 
 from typing import Literal
@@ -61,12 +63,26 @@ async def budget_exceeded(_, exc: BudgetExceeded):
     return JSONResponse(status_code=429, content={"detail": str(exc)})
 
 
+STARTED_AT = datetime.now(timezone.utc).isoformat(timespec="seconds")
+SECRET_NAMES = ("MODEL_API_KEY", "BASETEN_API_KEY", "AWAAZ_DEMO_OFFICER_PASSWORD")
+
+
+def misnamed_secrets() -> list[str]:
+    """Env names that only differ from a secret's name by case or spaces: a common hosting-dashboard slip.
+
+    Names only, never values."""
+    return sorted(name for name in os.environ
+                  if name not in SECRET_NAMES and name.strip().upper() in SECRET_NAMES)
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {
         "ok": True,
+        "started_at": STARTED_AT,
         "meta_key": bool(settings.meta_api_key),
         "baseten_key": bool(settings.baseten_api_key),
+        "misnamed_secrets": misnamed_secrets(),
         "spent_today_usd": round(settings.budget.spent_today(), 4),
         "daily_limit_usd": settings.budget.daily_limit_usd,
     }

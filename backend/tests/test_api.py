@@ -47,6 +47,16 @@ def test_health_reports_budget(client):
     body = client.get("/api/health").json()
     assert body["ok"] is True
     assert body["daily_limit_usd"] == 0.01
+    assert body["started_at"]
+
+
+def test_health_names_misnamed_secrets_without_values(client, monkeypatch):
+    # A plain dict: Windows env names are case-insensitive, Linux hosts' are not.
+    fake_env = {"model_api_key": "secret-value", "BASETEN_API_KEY ": "secret-value", "PATH": "/bin"}
+    monkeypatch.setattr(main.os, "environ", fake_env)
+    body = client.get("/api/health").json()
+    assert body["misnamed_secrets"] == ["BASETEN_API_KEY ", "model_api_key"]
+    assert "secret-value" not in str(body)
 
 
 def test_transcribe_rejects_non_wav(client):
