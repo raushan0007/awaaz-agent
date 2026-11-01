@@ -51,9 +51,11 @@ export async function shrinkPhoto(file) {
 // --- page chrome --------------------------------------------------------------------------------
 
 const LOGO = `<svg viewBox="0 0 48 48" aria-hidden="true">
-  <defs><linearGradient id="lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a3d"/><stop offset="1" stop-color="#e23d4b"/></linearGradient></defs>
-  <path d="M8 6h32a6 6 0 0 1 6 6v18a6 6 0 0 1-6 6H22l-9 8v-8H8a6 6 0 0 1-6-6V12a6 6 0 0 1 6-6Z" fill="url(#lg)"/>
-  <g stroke="#fff" stroke-width="3" stroke-linecap="round"><path d="M15 17v8M21 13v16M27 15v12M33 18v6"/></g></svg>`;
+  <defs><clipPath id="tile"><rect width="48" height="48" rx="12"/></clipPath></defs>
+  <g clip-path="url(#tile)"><rect width="48" height="16" fill="#ff9933"/><rect y="16" width="48" height="16" fill="#ffffff"/><rect y="32" width="48" height="16" fill="#138808"/></g>
+  <g stroke="#0a2a8a" fill="none"><circle cx="18" cy="24" r="7" stroke-width="1.8"/><g stroke-width=".7"><line x1="18" y1="24" x2="24.20" y2="24.00"/><line x1="18" y1="24" x2="23.99" y2="25.60"/><line x1="18" y1="24" x2="23.37" y2="27.10"/><line x1="18" y1="24" x2="22.38" y2="28.38"/><line x1="18" y1="24" x2="21.10" y2="29.37"/><line x1="18" y1="24" x2="19.60" y2="29.99"/><line x1="18" y1="24" x2="18.00" y2="30.20"/><line x1="18" y1="24" x2="16.40" y2="29.99"/><line x1="18" y1="24" x2="14.90" y2="29.37"/><line x1="18" y1="24" x2="13.62" y2="28.38"/><line x1="18" y1="24" x2="12.63" y2="27.10"/><line x1="18" y1="24" x2="12.01" y2="25.60"/><line x1="18" y1="24" x2="11.80" y2="24.00"/><line x1="18" y1="24" x2="12.01" y2="22.40"/><line x1="18" y1="24" x2="12.63" y2="20.90"/><line x1="18" y1="24" x2="13.62" y2="19.62"/><line x1="18" y1="24" x2="14.90" y2="18.63"/><line x1="18" y1="24" x2="16.40" y2="18.01"/><line x1="18" y1="24" x2="18.00" y2="17.80"/><line x1="18" y1="24" x2="19.60" y2="18.01"/><line x1="18" y1="24" x2="21.10" y2="18.63"/><line x1="18" y1="24" x2="22.38" y2="19.62"/><line x1="18" y1="24" x2="23.37" y2="20.90"/><line x1="18" y1="24" x2="23.99" y2="22.40"/></g>
+  <path d="M29 19.5a6.5 6.5 0 0 1 0 9M33 16a11.5 11.5 0 0 1 0 16" stroke-width="2.4" stroke-linecap="round"/></g>
+  <circle cx="18" cy="24" r="1.6" fill="#0a2a8a"/></svg>`;
 
 const PAGES = [
   ["citizen", "/", "🎙️", "शिकायत करें"],

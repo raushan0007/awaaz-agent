@@ -20,14 +20,15 @@ const PROBLEMS = {
   clipping: "आवाज़ फट रही है — माइक थोड़ा दूर रखें",
 };
 
-// Mirrored bars in the brand gradient; the newest level is on the right.
+// Mirrored bars running saffron to green; the newest level is on the right.
 function drawMeter() {
   const ctx = meter.getContext("2d");
   const { width, height } = meter;
   ctx.clearRect(0, 0, width, height);
   const grad = ctx.createLinearGradient(0, 0, width, 0);
-  grad.addColorStop(0, "#ff8a3d");
-  grad.addColorStop(1, "#e23d4b");
+  grad.addColorStop(0, "#ff9933");
+  grad.addColorStop(0.5, "#f5b041");
+  grad.addColorStop(1, "#138808");
   ctx.fillStyle = grad;
   const bars = 64;
   const w = width / bars;
