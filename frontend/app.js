@@ -1,6 +1,7 @@
 import { Recorder } from "./recorder.js";
 import {
-  $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateTown, mountChrome, revealOnScroll,
+  $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
+  mountChrome, revealOnScroll,
   shrinkPhoto, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
@@ -192,6 +193,11 @@ async function send() {
     form.append("text", text);
     form.append("area", $("area").value.trim());
     form.append("town", $("town").value.trim());
+    if (pin) {
+      form.append("lat", pin.lat);
+      form.append("lon", pin.lon);
+      form.append("accuracy", pin.accuracy);
+    }
     if (photoBlob) form.append("photo", photoBlob, "photo.jpg");
     const c = await postForm("/api/complaints", form);
     showResult(c);
@@ -375,16 +381,45 @@ $("townChips").addEventListener("click", (e) => {
   if (b) $("town").value = b.dataset.town;
 });
 
+// The exact spot: sent with the complaint for officers, never shown publicly.
+let pin = null;
+
+function showPin() {
+  const box = $("pin");
+  box.hidden = !pin;
+  if (!pin) return;
+  const weak = pin.accuracy > 100;
+  box.className = `pin${weak ? " weak" : ""}`;
+  // the short form people know from GPS-camera apps: drop the region digits, add the town
+  const code = pin.town ? `${pin.plus.slice(4)}, ${pin.town}` : pin.plus;
+  box.innerHTML = `<span>📍 सटीक जगह जुड़ी: <code>${esc(code)}</code> · ±${pin.accuracy} मी.</span>
+    <a href="${mapLink(pin)}" target="_blank" rel="noopener">नक्शे पर देखें</a>
+    <button type="button" class="link" id="pinRemove">हटाएँ</button>
+    ${weak ? `<small style="flex-basis:100%">लोकेशन कमज़ोर है — खुली जगह में जाकर 📍 दोबारा दबाएँ, या पास का लैंडमार्क लिखें।</small>` : ""}`;
+  $("pinRemove").addEventListener("click", () => { pin = null; showPin(); });
+}
+
 $("locate").addEventListener("click", async () => {
   const b = $("locate");
   b.disabled = true;
+  b.textContent = "📍 ढूँढ रहे हैं…";
   try {
-    $("town").value = await locateTown();
-    toast(`📍 ${$("town").value}`, "ok");
+    const here = await locateHere();
+    pin = here;
+    if (here.town) $("town").value = here.town;
+    if (here.locality && !$("area").value.trim()) $("area").value = here.locality;
+    showPin();
+    if (!here.locality && !$("area").value.trim()) {
+      $("area").focus();
+      toast("📍 सटीक जगह जुड़ गई। मोहल्ले का नाम नक्शे में नहीं मिला — पास का लैंडमार्क लिख दें।", "ok");
+    } else {
+      toast(`📍 ${here.locality ? here.locality + ", " : ""}${here.town} · ±${here.accuracy} मी.`, "ok");
+    }
   } catch (err) {
-    toast(err.message + " — शहर हाथ से लिखिए।", "bad");
+    toast(err.message + " — शहर और जगह हाथ से लिखिए।", "bad");
   } finally {
     b.disabled = false;
+    b.textContent = "📍 मेरी जगह";
   }
 });
 

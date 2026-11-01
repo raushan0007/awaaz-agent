@@ -1,5 +1,6 @@
 import {
-  $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mountChrome, shrinkPhoto, STATUS,
+  $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mapLink, mountChrome, plusCode,
+  shrinkPhoto, STATUS,
   timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
@@ -235,6 +236,8 @@ function itemHtml(c) {
       <span class="badge ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>
       ${c.supporters > 1 ? `<span class="badge merged">👥 ${c.supporters} लोगों ने बताया</span>` : ""}
       <span class="badge">📍 ${esc(c.area || "जगह नहीं बताई")}</span>
+      ${c.location ? `<a class="badge resolved" href="${mapLink(c.location)}" target="_blank" rel="noopener"
+        title="नागरिक के फ़ोन की सटीक जगह">🗺️ नक्शे पर · ${esc(plusCode(c.location.lat, c.location.lon))}${c.location.accuracy != null ? ` · ±${c.location.accuracy} मी.` : ""}</a>` : ""}
       ${c.photo ? `<span class="badge">📷 फ़ोटो</span>` : ""}
     </div>
     ${d.urgency_reason ? `<p class="why">क्यों ${esc(URGENCY[c.urgency] || "")}: ${esc(d.urgency_reason)}</p>` : ""}

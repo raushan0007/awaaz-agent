@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import unicodedata
 import sqlite3
 import threading
@@ -56,7 +57,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 """
 # Columns added after the first release, so databases made earlier keep working.
 LATER_COLUMNS = {
-    "complaints": {"photo": "TEXT", "evidence": "TEXT", "masked": "TEXT"},
+    # lat/lon/loc_accuracy: the phone's position, only when the citizen tapped 📍. Officers see it; the
+    # public endpoints never do.
+    "complaints": {"photo": "TEXT", "evidence": "TEXT", "masked": "TEXT",
+                   "lat": "REAL", "lon": "REAL", "loc_accuracy": "REAL"},
     "updates": {"photo": "TEXT"},  # the officer's photo of the work, if any
 }
 JSON_COLUMNS = ("decision", "photo", "evidence", "masked")
@@ -74,6 +78,14 @@ def area_key(area: str) -> str:
     # Not `\w`: it misses Devanagari vowel signs, which would split "वार्ड" into letters.
     text = "".join(" " if unicodedata.category(ch)[0] in "PSZ" else ch for ch in area.lower())
     return " ".join(w for w in text.split() if w not in NUMBER_WORDS)
+
+
+def distance_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Great-circle distance in metres (haversine); plenty for 'is this the same street corner'."""
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    a = (math.sin((p2 - p1) / 2) ** 2
+         + math.cos(p1) * math.cos(p2) * math.sin(math.radians(lon2 - lon1) / 2) ** 2)
+    return 2 * 6_371_000 * math.asin(math.sqrt(a))
 
 
 def town_of(area: str) -> str:
@@ -111,16 +123,19 @@ class Store:
 
     def add(self, *, text: str, area: str, has_photo: bool, status: str, category: str | None,
             urgency: str | None, duplicate_of: int | None, decision: dict | None, trace: list,
-            evidence: dict | None = None, masked: list[str] | None = None) -> int:
+            evidence: dict | None = None, masked: list[str] | None = None,
+            location: dict | None = None) -> int:
+        loc = location or {}
         with self._lock, self._db:
             cur = self._db.execute(
                 "INSERT INTO complaints (created_at, text, area, area_key, has_photo, status, category,"
-                " urgency, duplicate_of, decision, trace, evidence, masked) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " urgency, duplicate_of, decision, trace, evidence, masked, lat, lon, loc_accuracy)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (
                     datetime.now(timezone.utc).isoformat(timespec="seconds"),
                     text, area, area_key(area), int(has_photo), status, category, urgency, duplicate_of,
                     _dump(decision), json.dumps(trace, ensure_ascii=False), _dump(evidence),
-                    json.dumps(masked or []),
+                    json.dumps(masked or []), loc.get("lat"), loc.get("lon"), loc.get("accuracy"),
                 ),
             )
             return cur.lastrowid
@@ -192,6 +207,22 @@ class Store:
                 for r in problems[:limit]
             ],
         }
+
+    def find_near(self, lat: float, lon: float, category: str, radius_m: float = 200,
+                  days: int = 30) -> list[dict[str, Any]]:
+        """Open complaints of this kind pinned within `radius_m`, nearest first, each with `distance_m`."""
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        rows = self._db.execute(
+            "SELECT * FROM complaints WHERE status IN (%s) AND category = ? AND created_at >= ? AND lat IS NOT NULL"
+            % ",".join("?" * len(OPEN_STATES)),
+            (*OPEN_STATES, category, since),
+        ).fetchall()
+        near = []
+        for r in rows:
+            d = distance_m(lat, lon, r["lat"], r["lon"])
+            if d <= radius_m:
+                near.append({**self._row(r), "distance_m": round(d)})
+        return sorted(near, key=lambda c: c["distance_m"])
 
     def set_category(self, complaint_id: int, category: str) -> None:
         with self._lock, self._db:
@@ -463,4 +494,6 @@ class Store:
         for column in JSON_COLUMNS:
             d[column] = json.loads(d[column]) if d[column] else None
         d["trace"] = json.loads(d["trace"]) if d["trace"] else []
+        lat, lon, acc = d.pop("lat", None), d.pop("lon", None), d.pop("loc_accuracy", None)
+        d["location"] = {"lat": lat, "lon": lon, "accuracy": acc} if lat is not None else None
         return d

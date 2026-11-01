@@ -140,6 +140,7 @@ async def evidence(photo: UploadFile = File(...), concept: str = Form(...)) -> d
 async def file_complaint(
     text: str = Form(...), area: str = Form(""), town: str = Form(""),
     photo: UploadFile | None = File(None),
+    lat: float | None = Form(None), lon: float | None = Form(None), accuracy: float | None = Form(None),
 ) -> dict:
     text, area = text.strip(), area.strip()
     town = " ".join(town.split())
@@ -153,7 +154,16 @@ async def file_complaint(
     text, hidden_text = mask_pii(text)
     area, hidden_area = mask_pii(area)
     hidden = sorted(set(hidden_text + hidden_area))
-    report = Report(text=text, area=area, town=town)
+    location = None
+    if lat is not None or lon is not None:
+        # Roughly India's bounding box; a pin outside it is a typo or a spoof, not a civic problem here.
+        if lat is None or lon is None or not (6 <= lat <= 37.6 and 68 <= lon <= 97.5):
+            raise HTTPException(400, "The location must be a point in India.")
+        if accuracy is not None and not 0 <= accuracy <= 5000:
+            raise HTTPException(400, "Location accuracy must be 0 to 5000 metres.")
+        location = {"lat": round(lat, 6), "lon": round(lon, 6),
+                    "accuracy": round(accuracy) if accuracy is not None else None}
+    report = Report(text=text, area=area, town=town, location=location)
     photo_info = None
     if photo is not None and photo.filename:
         raw = await photo.read()
@@ -183,6 +193,7 @@ async def file_complaint(
         trace=result.trace,
         evidence=result.evidence,
         masked=hidden,
+        location=location,
     )
     if photo_info:
         photos_dir().mkdir(parents=True, exist_ok=True)
@@ -207,7 +218,12 @@ def area_summary(area: str) -> dict:
 
 @app.get("/api/complaints")
 def list_complaints(status: str | None = None, limit: int = 50) -> list[dict]:
-    return get_store().recent(limit=max(1, min(limit, 200)), status=status)
+    return [_public(c) for c in get_store().recent(limit=max(1, min(limit, 200)), status=status)]
+
+
+def _public(c: dict) -> dict:
+    """A complaint as anyone may see it: never the citizen's exact position."""
+    return {k: v for k, v in c.items() if k != "location"}
 
 
 @app.get("/api/complaints/{complaint_id}")
@@ -217,7 +233,7 @@ def get_complaint(complaint_id: int) -> dict:
     if body is None:
         raise HTTPException(404, "No such complaint.")
     body["supporters"] = store.supporters(complaint_id)
-    return body
+    return _public(body)
 
 
 @app.get("/api/complaints/{complaint_id}/photo")

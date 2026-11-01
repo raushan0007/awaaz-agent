@@ -246,3 +246,11 @@ def test_public_stats_count_without_report_text(client, store, open_model):
     assert s["avg_days_to_fix"] == 0.0
     assert [f["id"] for f in s["just_fixed"]] == [fixed]
     assert "sadak tooti hai" not in str(s)
+
+
+def test_officers_see_the_pin(client, store):
+    cid = store.add(text="naali jam", area="Ward 8, Forbesganj", has_photo=False, status="open", category="roads",
+                    urgency="high", duplicate_of=None, decision={"title_hi": TITLE}, trace=[],
+                    location={"lat": 26.31045, "lon": 87.2562, "accuracy": 9})
+    queue = client.get("/api/officer/queue", headers=headers(client, "roads.officer", "road-pass")).json()
+    assert next(c for c in queue if c["id"] == cid)["location"]["accuracy"] == 9

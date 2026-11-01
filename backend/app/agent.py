@@ -40,6 +40,8 @@ Work in this order:
 2. Call search_similar_complaints with the area and category to find open complaints about the SAME
    problem at the SAME place. Write the area as "Ward <number>, <Town>" whenever a ward number is given
    (also for Hindi reports), otherwise "<Locality>, <Town>", ending with the town exactly as given.
+   A match may carry distance_m: how far the citizen's phone was from that earlier complaint. Within about
+   100 m and the same problem, it is almost certainly the same thing even if the place is named differently.
    It IS a duplicate when it is the same kind of problem on the same street or at the same landmark,
    or plainly the same thing ("abhi tak theek nahi hua", "phir se", "still"), even if the new report
    adds details such as a new accident or that it got worse: merging adds the citizen as a supporter,
@@ -138,6 +140,7 @@ class Report:
     photo: bytes | None = None
     photo_mime: str = "image/jpeg"
     town: str = ""
+    location: dict | None = None  # {"lat", "lon", "accuracy"} when the citizen shared the phone's position
 
 
 def in_town(area: str, town: str) -> str:
@@ -236,6 +239,11 @@ class ComplaintAgent:
     async def _search(self, args: dict, report: Report, state: RunState) -> dict:
         area = in_town(args["area"], report.town)
         found = _rank(self.store.find_open(area, args["category"]), args.get("keywords", []))[:5]
+        if report.location:
+            # Names of places vary; a pin does not. Anything of this kind pinned within 200 m comes first.
+            near = self.store.find_near(report.location["lat"], report.location["lon"], args["category"])
+            ids = {c["id"] for c in near}
+            found = (near + [c for c in found if c["id"] not in ids])[:6]
         state.searched = True
         state.seen_ids.update(c["id"] for c in found)
         return {
@@ -248,6 +256,7 @@ class ComplaintAgent:
                     "title": (c["decision"] or {}).get("title_en", ""),
                     "report": c["text"][:300],
                     "supporters": self.store.supporters(c["id"]),
+                    **({"distance_m": c["distance_m"]} if "distance_m" in c else {}),
                 }
                 for c in found
             ]

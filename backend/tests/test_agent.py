@@ -264,3 +264,51 @@ def test_area_ends_with_any_town_the_citizen_gives():
     assert verify_decision(decision(area="Boring Road"), searched, False, "Patna")
     assert agent.in_town("Ward 3", "Gaya") == "Ward 3, Gaya"
     assert agent.in_town("Ward 3, Gaya", "gaya") == "Ward 3, Gaya"
+
+
+SULTAN_POKHAR = {"lat": 26.310943, "lon": 87.260105, "accuracy": 12}
+
+
+def test_pinned_complaints_nearby_are_found_whatever_the_place_is_called(store):
+    near = store.add(text="naali jam", area="Sultan Pokhar West, Forbesganj", has_photo=False, status="open",
+                     category="drainage", urgency="high", duplicate_of=None, decision=decision(), trace=[],
+                     location=SULTAN_POKHAR)
+    store.add(text="naali jam", area="Subhash Chowk, Forbesganj", has_photo=False, status="open", category="drainage",
+              urgency="high", duplicate_of=None, decision=decision(), trace=[],
+              location={"lat": 26.31045, "lon": 87.2562, "accuracy": 10})  # about 390 m away
+    found = store.find_near(26.3110, 87.2602, "drainage")
+    assert [c["id"] for c in found] == [near] and found[0]["distance_m"] < 20
+    assert store.find_near(26.3110, 87.2602, "roads") == []
+    assert store.get(near)["location"] == SULTAN_POKHAR
+
+
+async def test_search_adds_pinned_neighbours_with_their_distance(store):
+    pinned = store.add(text="gali ki naali band", area="Ward 12, Forbesganj", has_photo=False, status="open",
+                       category="roads", urgency="medium", duplicate_of=None, decision=decision(), trace=[],
+                       location=SULTAN_POKHAR)
+    search = ("search_similar_complaints", {"area": "Sultan Pokhar", "category": "roads", "keywords": ["naali"]})
+    client = ScriptedClient(completion(search), completion(("submit_decision", decision(area="Sultan Pokhar, Forbesganj"))))
+    report = Report("naali band hai", "Sultan Pokhar", town="Forbesganj", location={"lat": 26.31098, "lon": 87.26012, "accuracy": 8})
+    result = await ComplaintAgent(store, client).run(report)
+    match = result.trace[0]["result"]["matches"][0]
+    assert match["id"] == pinned and match["distance_m"] < 10  # different area text, same spot
+
+
+def test_exact_location_reaches_officers_but_never_the_public(tmp_path, monkeypatch):
+    store = Store(tmp_path / "a.db")
+    monkeypatch.setattr(main, "_store", store)
+
+    async def fake_run(self, report):
+        assert report.location == {"lat": 26.310943, "lon": 87.260105, "accuracy": 12}
+        return agent.AgentResult("open", {**decision(area="Sultan Pokhar West, Forbesganj"), "department": {}}, [])
+
+    monkeypatch.setattr(ComplaintAgent, "run", fake_run)
+    client = TestClient(main.app)
+    form = {"text": "naali jam hai", "town": "Forbesganj", "lat": "26.3109434", "lon": "87.2601049", "accuracy": "12.4"}
+    body = client.post("/api/complaints", data=form).json()
+    assert body["location"] == {"lat": 26.310943, "lon": 87.260105, "accuracy": 12}  # the citizen's own receipt
+    for path in [f"/api/complaints/{body['id']}", f"/api/complaints/{body['id']}/track", "/api/complaints",
+                 "/api/public/stats", "/api/areas/summary?area=Sultan Pokhar West, Forbesganj"]:
+        assert "26.31" not in client.get(path).text, path
+    for bad in [{"lat": "26.3"}, {"lat": "51.5", "lon": "-0.1"}, {"lat": "26.3", "lon": "87.2", "accuracy": "-5"}]:
+        assert client.post("/api/complaints", data={"text": "naali jam hai", "town": "Forbesganj", **bad}).status_code == 400

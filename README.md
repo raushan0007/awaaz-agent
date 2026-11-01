@@ -72,7 +72,8 @@ The final decision is **checked in code, not trusted** (`verify_decision`):
 
 - a duplicate must be an id the search actually returned, and the search must have run;
 - the area must end with the town the citizen named (typed, or found from the phone's location), and the
-  search is pinned to that town in code,
+  search is pinned to that town in code; when the report carries a GPS pin, complaints of the same kind pinned
+  within 200 m are added to the search with their distance,
   so "Ward 8" in Forbesganj never merges with "Ward 8" in Supaul;
 - "the photo shows it" must agree with SAM's counts, and a photo must have been checked at all;
 - high or critical urgency needs a stated reason; the letter must really be Devanagari Hindi;
@@ -87,8 +88,10 @@ A failed check or a Baseten outage falls back to a fixed Hindi template, so the 
 
 ## Privacy
 
-- The phone's location is asked for only when the citizen taps 📍; it goes once to OpenStreetMap's public
-  reverse geocoder to get the town name and is never sent to Awaaz or stored.
+- The phone's exact position is taken only when the citizen taps 📍. It is stored with the complaint so
+  the officer can open it on a map (with its Plus Code and GPS accuracy) and so reports pinned within 200 m
+  are matched as one problem; no public page or API ever shows it. To name the town and street, the
+  position is also sent once to OpenStreetMap's public reverse geocoder.
 
 - Mobile, Aadhaar, email and PAN numbers are replaced with a visible tag (`[मोबाइल नंबर छिपाया गया]`) before
   the model, the officers or the database see them (Devanagari digits included); the citizen is told.

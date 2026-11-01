@@ -151,23 +151,76 @@ export const WAVES = `<svg class="waves" viewBox="0 0 1200 64" preserveAspectRat
 
 export const ICON = { roads: "🛣️", water: "💧", electricity: "⚡", streetlight: "💡", sanitation: "🧹", drainage: "🌊", other: "📋" };
 
-/**
- * The phone's town, from its location: asked only when the citizen taps 📍, sent once to OpenStreetMap's
- * public reverse geocoder for the town name, and never stored.
- */
-export function locateTown() {
+/** Open Location Code ("Plus Code") of a point, 11 digits: a cell of about 3 x 3.5 m. */
+export function plusCode(lat, lon) {
+  const A = "23456789CFGHJMPQRVWX";
+  // whole-number arithmetic, as in the reference implementation, so cells never drift at their edges
+  let la = Math.floor((Math.min(Math.max(lat, -90), 89.9999999) + 90) * 2.5e7);
+  let lo = Math.floor((((lon + 180) % 360 + 360) % 360) * 8.192e6);
+  // five grid digits at full precision; an 11-digit code keeps only the most significant one
+  let grid = "";
+  for (let i = 0; i < 5; i++) {
+    grid = A[(la % 5) * 4 + (lo % 4)] + grid;
+    la = Math.floor(la / 5);
+    lo = Math.floor(lo / 4);
+  }
+  let pairs = "";
+  for (let i = 0; i < 5; i++) {
+    pairs = A[Math.floor(la % 20)] + A[Math.floor(lo % 20)] + pairs;
+    la = Math.floor(la / 20);
+    lo = Math.floor(lo / 20);
+  }
+  return `${pairs.slice(0, 8)}+${pairs.slice(8)}${grid[0]}`;
+}
+
+export const mapLink = (loc) => `https://www.google.com/maps?q=${loc.lat},${loc.lon}`;
+
+/** The best GPS fix within a few seconds: stops early once it is within 20 m. */
+function bestFix(ms = 9000) {
   return new Promise((resolve, reject) => {
     if (!navigator.geolocation) { reject(new Error("इस फ़ोन/ब्राउज़र में लोकेशन नहीं मिलती")); return; }
-    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
-      try {
-        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en`
-          + `&lat=${coords.latitude.toFixed(3)}&lon=${coords.longitude.toFixed(3)}`;
-        const a = (await (await fetch(url)).json()).address || {};
-        const town = a.city || a.town || a.county || a.state_district || a.village || "";
-        town ? resolve(town.replace(/ (district|tahsil|subdivision)$/i, "")) : reject(new Error("शहर का नाम नहीं मिला"));
-      } catch { reject(new Error("शहर का नाम नहीं मिल पाया")); }
-    }, () => reject(new Error("लोकेशन की अनुमति नहीं मिली")), { timeout: 15000, maximumAge: 600000 });
+    let best = null;
+    const done = () => {
+      navigator.geolocation.clearWatch(id);
+      clearTimeout(timer);
+      best ? resolve(best) : reject(new Error("लोकेशन नहीं मिल पाई — खुली जगह में दोबारा कोशिश करें"));
+    };
+    const id = navigator.geolocation.watchPosition((p) => {
+      if (!best || p.coords.accuracy < best.coords.accuracy) best = p;
+      if (p.coords.accuracy <= 20) done();
+    }, (err) => { if (!best) { navigator.geolocation.clearWatch(id); clearTimeout(timer); reject(new Error(
+      err.code === 1 ? "लोकेशन की अनुमति नहीं मिली" : "लोकेशन नहीं मिल पाई")); } },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: ms });
+    const timer = setTimeout(done, ms);
   });
+}
+
+/**
+ * Where the phone is, as precisely as it can tell: the pin (kept for officers only), its Plus Code, the
+ * town, and the road or neighbourhood when OpenStreetMap knows one. The coordinates go once to
+ * OpenStreetMap's public reverse geocoder for the names.
+ */
+export async function locateHere() {
+  const { coords } = await bestFix();
+  const here = { lat: coords.latitude, lon: coords.longitude, accuracy: Math.round(coords.accuracy) };
+  here.plus = plusCode(here.lat, here.lon);
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&addressdetails=1&accept-language=en`
+      + `&lat=${here.lat.toFixed(6)}&lon=${here.lon.toFixed(6)}`;
+    const a = (await (await fetch(url)).json()).address || {};
+    here.town = (a.city || a.town || a.county || a.state_district || a.village || "").replace(/ (district|tahsil|subdivision)$/i, "");
+    here.locality = a.neighbourhood || a.suburb || a.quarter || a.hamlet || a.road || (a.village !== here.town ? a.village : "") || "";
+  } catch {
+    here.town = here.town || "";
+    here.locality = "";
+  }
+  return here;
+}
+
+export async function locateTown() {
+  const here = await locateHere();
+  if (!here.town) throw new Error("शहर का नाम नहीं मिला");
+  return here.town;
 }
 
 export function timeAgo(iso) {
