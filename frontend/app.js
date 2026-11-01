@@ -1,6 +1,6 @@
 import { Recorder } from "./recorder.js";
 import {
-  $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, mountChrome, revealOnScroll,
+  $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateTown, mountChrome, revealOnScroll,
   shrinkPhoto, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
@@ -176,6 +176,11 @@ async function send() {
     $("text").focus();
     return;
   }
+  if (!$("town").value.trim()) {
+    toast("अपना शहर या ज़िला लिखिए, या 📍 मेरी जगह दबाइए।", "bad");
+    $("town").focus();
+    return;
+  }
   const btn = $("send");
   btn.disabled = true;
   $("thinking").hidden = false;
@@ -186,11 +191,12 @@ async function send() {
     const form = new FormData();
     form.append("text", text);
     form.append("area", $("area").value.trim());
-    form.append("town", document.querySelector('input[name="town"]:checked').value);
+    form.append("town", $("town").value.trim());
     if (photoBlob) form.append("photo", photoBlob, "photo.jpg");
     const c = await postForm("/api/complaints", form);
     showResult(c);
     loadPublic().catch(() => {});
+    loadPlaces().catch(() => {});  // a new town shows up straight away
     toast(c.status === "rejected" ? "शिकायत स्वीकार नहीं हुई" : `✓ शिकायत #${c.id} दर्ज हुई`, c.status === "rejected" ? "bad" : "ok");
   } catch (err) {
     toast("गड़बड़ी: " + err.message, "bad");
@@ -222,6 +228,7 @@ $("examples").addEventListener("click", (e) => {
 // --- live numbers, the AI replay, the ticker, department progress and the latest voices --------------
 
 let shownOnce = false;
+let place = "";  // "" = all of India
 
 function deptCard(key, c) {
   const pct = c.total ? Math.round((100 * c.resolved) / c.total) : 0;
@@ -274,7 +281,7 @@ async function playDemo() {
 }
 
 async function loadPublic() {
-  const s = await fetch("/api/public/stats").then((r) => r.json());
+  const s = await fetch(`/api/public/stats?place=${encodeURIComponent(place)}`).then((r) => r.json());
   const n = (k) => s.by_status[k] || 0;
   if (!shownOnce) {
     countUp($("sHeard"), s.reports);
@@ -290,11 +297,11 @@ async function loadPublic() {
   $("tFiled").textContent = s.today.filed;
   $("tFixed").textContent = s.today.fixed;
 
+  $("ticker").hidden = !s.just_fixed.length;
   if (s.just_fixed.length) {
     const items = s.just_fixed.map((f) =>
       `<span>✅ #${f.id} ${esc(f.title_hi)} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
     $("tickerTrack").innerHTML = items + items;
-    $("ticker").hidden = false;
   }
 
   const order = Object.keys(DEPARTMENTS).filter((k) => s.by_category[k]);
@@ -314,6 +321,74 @@ async function loadPublic() {
   shownOnce = true;
 }
 
+// --- places: all of India by default, one town on a tap, or wherever the phone is ---------------------
+
+let knownPlaces = [];
+const sameTown = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+async function loadPlaces() {
+  knownPlaces = await fetch("/api/places").then((r) => r.json());
+  $("placeList").innerHTML = knownPlaces.map((p) => `<option value="${esc(p.place)}">`).join("");
+  $("townChips").innerHTML = knownPlaces.length ? `<small>पहले से जुड़ी जगहें:</small>` +
+    knownPlaces.slice(0, 6).map((p) => `<button type="button" data-town="${esc(p.place)}">📍 ${esc(p.place)}</button>`).join("") : "";
+  const near = $("nearMe");
+  $("placeBar").innerHTML = `<button class="place${place ? "" : " on"}" type="button" data-place="">🗺️ पूरा भारत</button>` +
+    knownPlaces.slice(0, 6).map((p) => `<button class="place${sameTown(p.place, place) ? " on" : ""}" type="button" data-place="${esc(p.place)}">${esc(p.place)} · ${p.reports}</button>`).join("");
+  $("placeBar").append(near);
+}
+
+function showPlace(name) {
+  place = name;
+  document.querySelectorAll("#placeBar .place[data-place]").forEach((b) => b.classList.toggle("on", sameTown(b.dataset.place, name)));
+  shownOnce = true;  // numbers just update, no count-up again
+  loadPublic().catch(() => {});
+}
+
+$("placeBar").addEventListener("click", async (e) => {
+  const b = e.target.closest("button");
+  if (!b) return;
+  if (b.id !== "nearMe") { $("placeNote").hidden = true; showPlace(b.dataset.place); return; }
+  b.disabled = true;
+  b.textContent = "📍 ढूँढ रहे हैं…";
+  try {
+    const town = await locateTown();
+    if (!$("town").value.trim()) $("town").value = town;
+    const known = knownPlaces.find((p) => sameTown(p.place, town));
+    $("placeNote").hidden = false;
+    if (known) {
+      $("placeNote").textContent = `📍 आप ${town} में हैं — यहाँ की आवाज़ें दिखा रहे हैं।`;
+      showPlace(known.place);
+    } else {
+      $("placeNote").textContent = `📍 आप ${town} में हैं। यहाँ से अभी कोई शिकायत नहीं आई — पहली आवाज़ आप उठाइए! तब तक पूरे भारत का हाल।`;
+      showPlace("");
+    }
+  } catch (err) {
+    toast(err.message, "bad");
+  } finally {
+    b.disabled = false;
+    b.textContent = "📍 मेरे आस-पास";
+  }
+});
+
+$("townChips").addEventListener("click", (e) => {
+  const b = e.target.closest("button[data-town]");
+  if (b) $("town").value = b.dataset.town;
+});
+
+$("locate").addEventListener("click", async () => {
+  const b = $("locate");
+  b.disabled = true;
+  try {
+    $("town").value = await locateTown();
+    toast(`📍 ${$("town").value}`, "ok");
+  } catch (err) {
+    toast(err.message + " — शहर हाथ से लिखिए।", "bad");
+  } finally {
+    b.disabled = false;
+  }
+});
+
+loadPlaces().catch(() => {});
 loadPublic().catch(() => {});
 setInterval(() => loadPublic().catch(() => {}), 30000);
 revealOnScroll();

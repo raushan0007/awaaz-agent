@@ -40,9 +40,9 @@ DEPARTMENTS: dict[str, dict[str, str]] = {
     },
 }
 
-# Towns Awaaz serves: English name (used in stored areas) -> Hindi name. Every area ends with one of these.
-TOWNS: dict[str, str] = {"Supaul": "सुपौल", "Forbesganj": "फारबिसगंज"}
-DEFAULT_TOWN = "Supaul"
+# Awaaz takes reports from anywhere in India; the citizen names the town or district and every stored
+# area ends with it ("Ward 8, Forbesganj"), so places never mix.
+MAX_TOWN_CHARS = 40
 
 CATEGORIES = list(DEPARTMENTS)
 URGENCIES = ["low", "medium", "high", "critical"]

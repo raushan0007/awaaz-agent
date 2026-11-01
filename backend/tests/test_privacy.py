@@ -48,7 +48,7 @@ def test_filed_complaint_is_masked_everywhere(tmp_path, monkeypatch):
 
     monkeypatch.setattr(ComplaintAgent, "run", fake_run)
     body = TestClient(main.app).post("/api/complaints", data={
-        "text": "Sadak tooti hai, mujhe 9876543210 par call karein", "area": "Ward 5, ram@x.in"}).json()
+        "text": "Sadak tooti hai, mujhe 9876543210 par call karein", "area": "Ward 5, ram@x.in", "town": "Supaul"}).json()
     assert "9876543210" not in seen["text"] and "ram@x.in" not in seen["area"]
     assert "9876543210" not in store.get(body["id"])["text"]
     assert body["masked"] == ["email", "mobile"]

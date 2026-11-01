@@ -76,6 +76,11 @@ def area_key(area: str) -> str:
     return " ".join(w for w in text.split() if w not in NUMBER_WORDS)
 
 
+def town_of(area: str) -> str:
+    """'Sultan Pokhar West, Forbesganj' -> 'Forbesganj': the town is what follows the last comma."""
+    return area.rsplit(",", 1)[-1].strip() if "," in area else area.strip()
+
+
 def _dump(value: dict | list | None) -> str | None:
     return json.dumps(value, ensure_ascii=False) if value is not None else None
 
@@ -355,14 +360,32 @@ class Store:
         return {"days": days, "kpis": {**summary(problems), "reports": len(rows)}, "trend": [
             {"day": d, **v} for d, v in trend.items()], "departments": departments, "areas": areas, "lists": lists}
 
-    def public_stats(self, recent: int = 8) -> dict[str, Any]:
-        """What the home page shows anyone: counts, per-department progress and the latest problems.
+    def places(self) -> list[dict[str, Any]]:
+        """Towns with at least one report, busiest first, shown as first spelled."""
+        seen: dict[str, dict[str, Any]] = {}
+        for area, status in self._db.execute(
+            "SELECT area, status FROM complaints WHERE status NOT IN ('rejected', 'needs_review') AND area != ''"
+            " ORDER BY id"
+        ).fetchall():
+            town = town_of(area)
+            key = area_key(town)
+            if not key:
+                continue
+            p = seen.setdefault(key, {"place": town, "reports": 0, "open": 0})
+            p["reports"] += 1
+            p["open"] += status in OPEN_STATES
+        return sorted(seen.values(), key=lambda p: -p["reports"])
 
-        Titles, places and status only, never report text or photos."""
+    def public_stats(self, recent: int = 8, place: str = "") -> dict[str, Any]:
+        """What the home page shows anyone, for all of India or one town: counts, per-department progress
+        and the latest problems. Titles, places and status only, never report text or photos."""
         rows = self._db.execute(
-            "SELECT id, created_at, area, status, category, urgency, duplicate_of, decision FROM complaints"
+            "SELECT id, created_at, area, area_key, status, category, urgency, duplicate_of, decision FROM complaints"
             " WHERE status NOT IN ('rejected', 'needs_review') ORDER BY id DESC"
         ).fetchall()
+        if place:
+            key = area_key(place)
+            rows = [r for r in rows if area_key(town_of(r["area"])) == key]
         problems = [r for r in rows if r["duplicate_of"] is None]
         fixed_at = dict(self._db.execute(
             "SELECT complaint_id, MIN(created_at) FROM updates WHERE status = 'resolved' GROUP BY complaint_id"
@@ -381,6 +404,7 @@ class Store:
             c["total"] += 1
             c[r["status"]] = c.get(r["status"], 0) + 1
         return {
+            "place": place,
             "reports": len(rows),
             "problems": len(problems),
             "by_status": by_status,

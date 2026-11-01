@@ -8,7 +8,7 @@ Built for the **Meta Global AI Developer Hackathon** (Oct 27 – Nov 4, 2026), I
 
 In small-town India a broken road, a dry tap or a live wire hanging over a roof usually goes unreported: the
 forms are in English, the offices are far, and nobody knows which department owns the problem. **Awaaz**
-("voice") lets a citizen in Supaul or Forbesganj, Bihar just *say* the problem in Hindi, Hinglish or English, add a photo, and
+("voice") lets a citizen anywhere in India just *say* the problem in Hindi, Hinglish or English, add a photo, and
 get back a tracking number. An agent turns the report into a formal complaint for the right department,
 checks the photo, merges it with reports of the same problem, and keeps the citizen updated in plain Hindi.
 
@@ -71,7 +71,8 @@ Citizen data only goes to the standard models, never the `-contributor` variants
 The final decision is **checked in code, not trusted** (`verify_decision`):
 
 - a duplicate must be an id the search actually returned, and the search must have run;
-- the area must end with the town the citizen picked, and the search is pinned to that town in code,
+- the area must end with the town the citizen named (typed, or found from the phone's location), and the
+  search is pinned to that town in code,
   so "Ward 8" in Forbesganj never merges with "Ward 8" in Supaul;
 - "the photo shows it" must agree with SAM's counts, and a photo must have been checked at all;
 - high or critical urgency needs a stated reason; the letter must really be Devanagari Hindi;
@@ -85,6 +86,9 @@ may not contain any number the officer did not write, which is where invented pr
 A failed check or a Baseten outage falls back to a fixed Hindi template, so the citizen always hears back.
 
 ## Privacy
+
+- The phone's location is asked for only when the citizen taps 📍; it goes once to OpenStreetMap's public
+  reverse geocoder to get the town name and is never sent to Awaaz or stored.
 
 - Mobile, Aadhaar, email and PAN numbers are replaced with a visible tag (`[मोबाइल नंबर छिपाया गया]`) before
   the model, the officers or the database see them (Devanagari digits included); the citizen is told.
@@ -126,7 +130,8 @@ and a `demo.officer` login is created with that password.
 | Endpoint | |
 |---|---|
 | `POST /api/transcribe` | WAV (mono, 16-bit, 16/24 kHz) → transcript |
-| `POST /api/complaints` | `text`, `town`, optional `area`, `photo` → the agent's decision, tool trace and area overview |
+| `POST /api/complaints` | `text`, `town` (any town or district), optional `area`, `photo` → the agent's decision, tool trace and area overview |
+| `GET /api/places` | every town reports have come from, busiest first |
 | `GET /api/complaints/{id}/track` | the citizen's view: status and Hindi updates |
 | `GET /api/public/stats` | home-page numbers: counts, per-department progress, latest problems, just fixed (no report text) |
 | `GET /api/officer/insights?days=` | the officer's KPIs, daily trend, department and area rankings, attention lists |
@@ -161,7 +166,7 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 | Oct 29 | Officer dashboard, Muse Spark Open status updates, citizen tracking |
 | Oct 30 | PII masking, demo data through the live API, better duplicate merging, hotspots |
 | Oct 31 | Docker / Render deployment, demo database, this README |
-| Nov 1 | Second town (Forbesganj), town-scoped duplicate search, area overview, real photo reports |
+| Nov 1 | Any town in India (typed or from the phone's location), town-scoped duplicate search, area overview, real photo reports from Forbesganj |
 | Nov 1 | Redesigned UI: ticket card with progress stepper, phone bottom nav, officer donut chart and filters; voice samples kept only on the author's machine; officers attach a photo of the work |
 | Nov 1 | Night-navy design with the turning Ashoka chakra, live numbers and AI replay on the home page; officer analysis (trend, rankings, attention lists, printable report) |
 

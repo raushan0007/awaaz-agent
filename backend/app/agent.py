@@ -16,7 +16,7 @@ from typing import Any
 from openai import AsyncOpenAI
 
 from .config import settings
-from .departments import CATEGORIES, DEFAULT_TOWN, DEPARTMENTS, TOWNS, URGENCIES, catalog_text
+from .departments import CATEGORIES, DEPARTMENTS, URGENCIES, catalog_text
 from .meta_client import async_meta_client
 from .store import Store, area_key
 from .vision import segment_image
@@ -26,8 +26,8 @@ MAX_PHOTO_CHECKS = 3
 DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 
 SYSTEM_PROMPT = f"""You are Awaaz, an assistant that turns a citizen's report about a local civic problem
-in Bihar (India) into a formal complaint for the right government department. Awaaz serves these
-towns: {", ".join(TOWNS)}. The citizen picks the town; it is given with the report.
+anywhere in India into a formal complaint for the right government department. The citizen names their
+town or district; it is given with the report.
 Reports arrive in Hindi, English or Hinglish, often typed from a voice note, with spelling mistakes.
 
 Departments (pick the category key):
@@ -38,8 +38,8 @@ Work in this order:
    disputes, requests for medical or legal advice, and anything about political parties, leaders or
    elections. If rejected, call submit_decision right away with is_valid_complaint=false.
 2. Call search_similar_complaints with the area and category to find open complaints about the SAME
-   problem at the SAME place. Write the area in English and end it with the town: "Ward <number>, <Town>"
-   whenever a ward number is given (also for Hindi reports), otherwise "<Locality>, <Town>".
+   problem at the SAME place. Write the area as "Ward <number>, <Town>" whenever a ward number is given
+   (also for Hindi reports), otherwise "<Locality>, <Town>", ending with the town exactly as given.
    It IS a duplicate when it is the same kind of problem on the same street or at the same landmark,
    or plainly the same thing ("abhi tak theek nahi hua", "phir se", "still"), even if the new report
    adds details such as a new accident or that it got worse: merging adds the citizen as a supporter,
@@ -137,12 +137,14 @@ class Report:
     area: str = ""
     photo: bytes | None = None
     photo_mime: str = "image/jpeg"
-    town: str = DEFAULT_TOWN
+    town: str = ""
 
 
 def in_town(area: str, town: str) -> str:
     """Pin an area to the citizen's town, so 'Ward 8' in one town never matches 'Ward 8' in another."""
-    return area if area_key(area).endswith(area_key(town)) else f"{area.strip()}, {town}"
+    if not town or area_key(area).endswith(area_key(town)):
+        return area
+    return f"{area.strip()}, {town}"
 
 
 @dataclass
@@ -168,7 +170,7 @@ class AgentResult:
     evidence: dict | None = None
 
 
-def verify_decision(d: dict, state: RunState, has_photo: bool, town: str = DEFAULT_TOWN) -> list[str]:
+def verify_decision(d: dict, state: RunState, has_photo: bool, town: str = "") -> list[str]:
     """Every rule here is checkable from the tool results; none of it trusts the model's say-so."""
     errors: list[str] = []
     if not d["is_valid_complaint"]:
@@ -184,7 +186,7 @@ def verify_decision(d: dict, state: RunState, has_photo: bool, town: str = DEFAU
         errors.append(f"duplicate_of={d['duplicate_of']} was not returned by search_similar_complaints.")
     if not d["area"].strip():
         errors.append("area is required.")
-    elif not area_key(d["area"]).endswith(area_key(town)):
+    elif town and not area_key(d["area"]).endswith(area_key(town)):
         errors.append(f"area must end with the citizen's town, e.g. '{d['area'].strip()}, {town}'.")
     if not d["title_en"].strip() or not d["title_hi"].strip():
         errors.append("title_en and title_hi are required.")

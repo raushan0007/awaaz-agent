@@ -192,7 +192,7 @@ def test_complaint_endpoint_stores_and_counts_supporters(tmp_path, monkeypatch):
     monkeypatch.setattr(ComplaintAgent, "run", fake_run)
     client = TestClient(main.app)
     assert client.post("/api/complaints", data={"text": "hi"}).status_code == 400
-    body = client.post("/api/complaints", data={"text": "ward 5 sadak", "area": "Ward 5"}).json()
+    body = client.post("/api/complaints", data={"text": "ward 5 sadak", "area": "Ward 5", "town": "Supaul"}).json()
     assert body["status"] == "merged" and body["supporters"] == 2
     assert client.get(f"/api/complaints/{parent}").json()["supporters"] == 2
     assert len(client.get("/api/complaints").json()) == 2
@@ -237,7 +237,30 @@ def test_area_summary_shows_the_whole_place_without_report_text(tmp_path, monkey
     assert client.get("/api/areas/summary", params={"area": " "}).status_code == 400
 
 
-def test_complaint_endpoint_rejects_unknown_town(tmp_path, monkeypatch):
-    monkeypatch.setattr(main, "_store", Store(tmp_path / "a.db"))
-    r = TestClient(main.app).post("/api/complaints", data={"text": "sadak tooti hai", "town": "Patna"})
-    assert r.status_code == 400
+def test_complaint_endpoint_needs_a_town_but_takes_any(tmp_path, monkeypatch):
+    store = Store(tmp_path / "a.db")
+    monkeypatch.setattr(main, "_store", store)
+    client = TestClient(main.app)
+    for bad in ["", "   ", "1234", "x" * 41]:
+        assert client.post("/api/complaints", data={"text": "sadak tooti hai", "town": bad}).status_code == 400
+
+    async def fake_run(self, report):
+        assert report.town == "Patna"  # extra spaces squeezed
+        return agent.AgentResult("open", {**decision(area="Boring Road, Patna"), "department": {}}, [])
+
+    monkeypatch.setattr(ComplaintAgent, "run", fake_run)
+    body = client.post("/api/complaints", data={"text": "sadak tooti hai", "town": "  Patna "}).json()
+    assert body["area"] == "Boring Road, Patna"
+    seed_open(store, area="Ward 5, Supaul")
+    assert [p["place"] for p in client.get("/api/places").json()] == ["Patna", "Supaul"]
+    patna = client.get("/api/public/stats", params={"place": "patna"}).json()
+    assert patna["reports"] == 1 and patna["recent"][0]["area"] == "Boring Road, Patna"
+    assert client.get("/api/public/stats").json()["reports"] == 2
+
+
+def test_area_ends_with_any_town_the_citizen_gives():
+    searched = RunState(searched=True)
+    assert verify_decision(decision(area="Boring Road, Patna"), searched, False, "Patna") == []
+    assert verify_decision(decision(area="Boring Road"), searched, False, "Patna")
+    assert agent.in_town("Ward 3", "Gaya") == "Ward 3, Gaya"
+    assert agent.in_town("Ward 3, Gaya", "gaya") == "Ward 3, Gaya"

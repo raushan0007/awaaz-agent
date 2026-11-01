@@ -14,7 +14,7 @@
 <body>
   <main>
     <section class="card hero" id="hero">
-      <span class="kicker"><i></i>हर नागरिक की आवाज़ · Meta AI</span>
+      <span class="kicker"><i></i>भारत के हर नागरिक की आवाज़ · Meta AI</span>
       <h1>आपकी आवाज़,<br><span class="hl">सही दफ़्तर तक।</span></h1>
       <p>समस्या अपनी भाषा में बोलिए, लिखिए या फ़ोटो भेजिए। हम उसे औपचारिक शिकायत बनाकर सही विभाग तक पहुँचाएँगे।</p>
       <div class="stats-row">
@@ -24,6 +24,11 @@
         <div class="stat"><b id="sDays">–</b><span>दिन में औसत समाधान</span></div>
       </div>
       <div class="live"><i></i>आज: <b id="tFiled">0</b> आईं · <b id="tFixed">0</b> हल हुईं</div>
+      <div class="place-bar" id="placeBar">
+        <button class="place on" type="button" data-place="">🗺️ पूरा भारत</button>
+        <button class="place near" type="button" id="nearMe">📍 मेरे आस-पास</button>
+      </div>
+      <p class="place-note" id="placeNote" hidden></p>
       <div class="demo" id="demo" hidden>
         <small>🔒 असली शिकायत · निजी जानकारी छिपी</small>
         <p class="said" id="demoSaid"></p>
@@ -62,11 +67,14 @@
         <textarea id="text" rows="4" placeholder="जैसे: हमारे मोहल्ले में 3 दिन से बिजली नहीं है, ट्रांसफ़ॉर्मर जल गया है…"></textarea>
         <div class="examples" id="examples"><small>उदाहरण आज़माइए:</small></div>
 
-        <span class="label" id="townLabel">शहर</span>
-        <div class="towns" role="radiogroup" aria-labelledby="townLabel">
-          <label><input type="radio" name="town" value="Supaul" checked><span>सुपौल<small>Supaul</small></span></label>
-          <label><input type="radio" name="town" value="Forbesganj"><span>फारबिसगंज<small>Forbesganj</small></span></label>
+        <label for="town">शहर / ज़िला</label>
+        <div class="row">
+          <input id="town" type="text" maxlength="40" list="placeList" autocomplete="address-level2" placeholder="जैसे: Supaul, Patna, Gaya…">
+          <button class="locate" type="button" id="locate" title="फ़ोन की लोकेशन से शहर भरें">📍 मेरी जगह</button>
         </div>
+        <datalist id="placeList"></datalist>
+        <div class="examples" id="townChips"></div>
+        <p class="hint" id="locHint">📍 दबाने पर फ़ोन की लोकेशन सिर्फ़ शहर का नाम जानने के लिए OpenStreetMap को जाती है; हम उसे सेव नहीं करते।</p>
 
         <label for="area">जगह (वार्ड / मोहल्ला / चौक)</label>
         <input id="area" type="text" maxlength="80" placeholder="जैसे: वार्ड 8, सुभाष चौक">

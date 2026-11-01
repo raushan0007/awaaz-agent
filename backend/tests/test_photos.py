@@ -79,7 +79,7 @@ def test_complaint_with_photo_stores_clean_photo_and_evidence(tmp_path, monkeypa
 
     monkeypatch.setattr(ComplaintAgent, "run", fake_run)
     client = TestClient(main.app)
-    body = client.post("/api/complaints", data={"text": "sadak me gaddha"},
+    body = client.post("/api/complaints", data={"text": "sadak me gaddha", "town": "Supaul"},
                        files={"photo": ("p.jpg", jpeg(), "image/jpeg")}).json()
     assert b"GPS" not in seen["photo"]
     assert body["photo"] == {"file": f"{body['id']}.jpg", "width": 640, "height": 480}
@@ -87,10 +87,10 @@ def test_complaint_with_photo_stores_clean_photo_and_evidence(tmp_path, monkeypa
     served = client.get(f"/api/complaints/{body['id']}/photo")
     assert served.status_code == 200 and b"GPS" not in served.content
 
-    no_photo = client.post("/api/complaints", data={"text": "sadak me gaddha"}).json()
+    no_photo = client.post("/api/complaints", data={"text": "sadak me gaddha", "town": "Supaul"}).json()
     assert no_photo["photo"] is None
     assert client.get(f"/api/complaints/{no_photo['id']}/photo").status_code == 404
-    bad = client.post("/api/complaints", data={"text": "sadak me gaddha"},
+    bad = client.post("/api/complaints", data={"text": "sadak me gaddha", "town": "Supaul"},
                       files={"photo": ("p.webp", b"RIFF....WEBP", "image/webp")})
     assert bad.status_code == 400
 

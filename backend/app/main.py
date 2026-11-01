@@ -18,7 +18,7 @@ from . import auth, status_writer
 from .agent import ComplaintAgent, Report
 from .audio import save_sample, voice_quality
 from .config import BudgetExceeded, settings
-from .departments import CATEGORIES, DEFAULT_TOWN, DEPARTMENTS, TOWNS
+from .departments import CATEGORIES, DEPARTMENTS, MAX_TOWN_CHARS
 from .meta_client import transcribe_wav
 from .photos import PhotoError, clean_photo
 from .privacy import mask_pii
@@ -138,12 +138,13 @@ async def evidence(photo: UploadFile = File(...), concept: str = Form(...)) -> d
 
 @app.post("/api/complaints")
 async def file_complaint(
-    text: str = Form(...), area: str = Form(""), town: str = Form(DEFAULT_TOWN),
+    text: str = Form(...), area: str = Form(""), town: str = Form(""),
     photo: UploadFile | None = File(None),
 ) -> dict:
     text, area = text.strip(), area.strip()
-    if town not in TOWNS:
-        raise HTTPException(400, f"Town must be one of: {', '.join(TOWNS)}.")
+    town = " ".join(town.split())
+    if not town or len(town) > MAX_TOWN_CHARS or not any(ch.isalpha() for ch in town):
+        raise HTTPException(400, f"Name the town or district (up to {MAX_TOWN_CHARS} characters).")
     if len(text) < 5 or len(text) > MAX_TEXT_CHARS:
         raise HTTPException(400, f"Describe the problem in 5 to {MAX_TEXT_CHARS} characters.")
     if len(area) > 80:
@@ -308,9 +309,16 @@ def officer_insights(days: int = 30, officer: dict = Depends(current_officer)) -
 
 
 @app.get("/api/public/stats")
-def public_stats() -> dict:
-    """Home-page numbers anyone may see: counts, per-department progress, the latest problems."""
-    return get_store().public_stats()
+def public_stats(place: str = "") -> dict:
+    """Home-page numbers anyone may see, for all of India or one town: counts, per-department progress,
+    the latest problems."""
+    return get_store().public_stats(place=place.strip()[:MAX_TOWN_CHARS])
+
+
+@app.get("/api/places")
+def places() -> list[dict]:
+    """Every town complaints have come from, busiest first; new places appear as soon as someone reports."""
+    return get_store().places()
 
 
 # Which moves an officer may make from each state.

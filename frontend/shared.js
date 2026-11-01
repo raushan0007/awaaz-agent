@@ -71,7 +71,7 @@ export function mountChrome(page) {
   document.body.insertAdjacentHTML("afterbegin", `
     <div class="topline" aria-hidden="true"></div>
     <header class="top"><div class="top-in">
-      <a class="brand" href="/">${LOGO}<span><b>आवाज़</b><small>शिकायत पोर्टल · सुपौल · फारबिसगंज</small></span></a>
+      <a class="brand" href="/">${LOGO}<span><b>आवाज़</b><small>नागरिक शिकायत पोर्टल · भारत</small></span></a>
       <div id="headerExtra"></div>
       <nav class="pills" aria-label="पन्ने">${links(page, false)}</nav>
     </div></header>`);
@@ -80,7 +80,7 @@ export function mountChrome(page) {
       <div class="foot-line"></div>
       <div class="brand" style="justify-content:center;margin:0">${LOGO}</div>
       <p class="jai">जय हिन्द</p>
-      <p>सुपौल और फारबिसगंज, बिहार के लोगों के लिए · Meta Global AI Developer Hackathon 2026</p>
+      <p>भारत के हर नागरिक के लिए · Meta Global AI Developer Hackathon 2026</p>
       <p>🔒 आपका मोबाइल, आधार नंबर और फ़ोटो की लोकेशन किसी को नहीं दिखती।</p>
       <p class="models">MUSE SPARK · VOICE TRANSCRIBE · SAM 3.1 · MUSE SPARK OPEN</p>
     </footer>
@@ -150,6 +150,25 @@ export const WAVES = `<svg class="waves" viewBox="0 0 1200 64" preserveAspectRat
   <path d="M0 46 C200 30 400 62 600 46 S1000 30 1240 46 V64 H0Z" fill="#138808"/></svg>`;
 
 export const ICON = { roads: "🛣️", water: "💧", electricity: "⚡", streetlight: "💡", sanitation: "🧹", drainage: "🌊", other: "📋" };
+
+/**
+ * The phone's town, from its location: asked only when the citizen taps 📍, sent once to OpenStreetMap's
+ * public reverse geocoder for the town name, and never stored.
+ */
+export function locateTown() {
+  return new Promise((resolve, reject) => {
+    if (!navigator.geolocation) { reject(new Error("इस फ़ोन/ब्राउज़र में लोकेशन नहीं मिलती")); return; }
+    navigator.geolocation.getCurrentPosition(async ({ coords }) => {
+      try {
+        const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=10&accept-language=en`
+          + `&lat=${coords.latitude.toFixed(3)}&lon=${coords.longitude.toFixed(3)}`;
+        const a = (await (await fetch(url)).json()).address || {};
+        const town = a.city || a.town || a.county || a.state_district || a.village || "";
+        town ? resolve(town.replace(/ (district|tahsil|subdivision)$/i, "")) : reject(new Error("शहर का नाम नहीं मिला"));
+      } catch { reject(new Error("शहर का नाम नहीं मिल पाया")); }
+    }, () => reject(new Error("लोकेशन की अनुमति नहीं मिली")), { timeout: 15000, maximumAge: 600000 });
+  });
+}
 
 export function timeAgo(iso) {
   const hours = (Date.now() - new Date(iso)) / 36e5;
