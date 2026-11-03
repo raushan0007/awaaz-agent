@@ -64,7 +64,9 @@ LATER_COLUMNS = {
     "complaints": {"photo": "TEXT", "evidence": "TEXT", "masked": "TEXT",
                    "lat": "REAL", "lon": "REAL", "loc_accuracy": "REAL",
                    # salted fingerprint of the mobile number, if one was given; the number itself is never kept
-                   "contact_hash": "TEXT"},
+                   "contact_hash": "TEXT",
+                   # where the work stands: inspected -> approved -> in_progress -> resolved
+                   "stage": "TEXT"},
     "updates": {"photo": "TEXT"},  # the officer's photo of the work, if any
 }
 JSON_COLUMNS = ("decision", "photo", "evidence", "masked")
@@ -250,6 +252,29 @@ class Store:
             (complaint_id,),
         ).fetchall()
         return [{**dict(r), "photo": json.loads(r["photo"]) if r["photo"] else None} for r in rows]
+
+    def set_status(self, complaint_id: int, status: str, stage: str | None = None) -> None:
+        with self._lock, self._db:
+            self._db.execute("UPDATE complaints SET status = ?, stage = ? WHERE id = ?", (status, stage, complaint_id))
+
+    def contact_hashes(self, complaint_id: int) -> set[str]:
+        """Fingerprints of everyone who reported this problem: the original reporter and those merged into it."""
+        rows = self._db.execute(
+            "SELECT contact_hash FROM complaints WHERE (id = ? OR duplicate_of = ?) AND contact_hash IS NOT NULL",
+            (complaint_id, complaint_id)).fetchall()
+        return {r[0] for r in rows}
+
+    def closed(self, department: str, days: int = 30, limit: int = 100) -> list[dict[str, Any]]:
+        """Recently fixed or closed complaints, newest first: where a wrong 'fixed' is caught and reopened."""
+        where, args = self._scope(department)
+        since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
+        rows = self._db.execute(
+            f"SELECT c.*, (SELECT COUNT(*) FROM complaints d WHERE d.duplicate_of = c.id) + 1 AS supporters"
+            f" FROM complaints c WHERE status IN ('resolved', 'rejected') AND {where}"
+            f" AND (SELECT MAX(created_at) FROM updates u WHERE u.complaint_id = c.id) >= ?"
+            f" ORDER BY (SELECT MAX(created_at) FROM updates u WHERE u.complaint_id = c.id) DESC LIMIT ?",
+            (*args, since, limit)).fetchall()
+        return [self._row(r) for r in rows]
 
     def update(self, update_id: int) -> dict[str, Any] | None:
         row = self._db.execute("SELECT * FROM updates WHERE id = ?", (update_id,)).fetchone()

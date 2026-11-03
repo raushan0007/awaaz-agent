@@ -88,16 +88,29 @@
 
       <section id="queueSection">
         <div class="queue-head">
-          <h2>काम की सूची <small id="queueCount"></small></h2>
+          <h2 id="queueTitle">काम की सूची <small id="queueCount"></small></h2>
+          <div class="queue-tools">
+            <select id="sort" aria-label="क्रम">
+              <option value="">⚡ सबसे ज़रूरी पहले</option>
+              <option value="idle">⏰ सबसे देर से रुकी</option>
+              <option value="oldest">📅 सबसे पुरानी पहले</option>
+              <option value="people">👥 सबसे ज़्यादा लोग</option>
+            </select>
+            <button class="ghost" type="button" id="export">⬇️ Excel में निकालें</button>
+          </div>
         </div>
         <div class="filters" id="filters">
-          <button class="chip" type="button" data-filter="all" aria-pressed="true">सभी</button>
-          <button class="chip" type="button" data-filter="critical" aria-pressed="false">🔴 बहुत ज़रूरी</button>
-          <button class="chip" type="button" data-filter="high" aria-pressed="false">🟠 ज़रूरी</button>
-          <button class="chip" type="button" data-filter="in_progress" aria-pressed="false">काम चालू</button>
-          <button class="chip" type="button" data-filter="needs_review" aria-pressed="false">जाँच बाकी</button>
-          <input id="search" type="text" placeholder="🔍 जगह या समस्या खोजें" aria-label="खोजें">
+          <button class="chip" type="button" data-filter="all" aria-pressed="true">सभी खुली <b data-count="all"></b></button>
+          <button class="chip" type="button" data-filter="open" aria-pressed="false">🕒 पेंडिंग — काम शुरू नहीं <b data-count="open"></b></button>
+          <button class="chip warn-chip" type="button" data-filter="overdue" aria-pressed="false">⏰ देर हो रही <b data-count="overdue"></b></button>
+          <button class="chip" type="button" data-filter="unheard" aria-pressed="false">🔕 अनसुनी <b data-count="unheard"></b></button>
+          <button class="chip" type="button" data-filter="critical" aria-pressed="false">🔴 बहुत ज़रूरी <b data-count="critical"></b></button>
+          <button class="chip" type="button" data-filter="high" aria-pressed="false">🟠 ज़रूरी <b data-count="high"></b></button>
+          <button class="chip" type="button" data-filter="in_progress" aria-pressed="false">🔧 काम चालू <b data-count="in_progress"></b></button>
+          <button class="chip" type="button" data-filter="needs_review" aria-pressed="false">🔎 जाँच बाकी <b data-count="needs_review"></b></button>
+          <button class="chip" type="button" data-filter="closed" aria-pressed="false">✅ हल / बंद (30 दिन) <b data-count="closed"></b></button>
         </div>
+        <input id="search" type="text" placeholder="🔍 जगह, समस्या या शिकायत संख्या खोजें" aria-label="खोजें" style="margin-bottom:14px">
         <div id="queue" class="queue"></div>
       </section>
     </div>

@@ -2,7 +2,7 @@ import { Recorder } from "./recorder.js";
 import {
   $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
   mountChrome, revealOnScroll,
-  donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  animateLists, celebrate, donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
 mountChrome("citizen");
@@ -178,7 +178,7 @@ function showResult(c) {
       <div class="ticket-no"><small>शिकायत संख्या</small><b>#${c.id}</b></div>
     </div>
     <div class="ticket-body">
-      ${stepperHtml(c.status)}
+      ${stepperHtml(c.status, c.stage)}
       <div class="badges">
         ${dept ? `<span class="badge dept">🏛️ ${esc(dept)}</span>` : ""}
         ${c.urgency ? `<span class="badge ${esc(c.urgency)}">${esc(URGENCY[c.urgency] || c.urgency)}</span>` : ""}
@@ -546,6 +546,7 @@ $("locate").addEventListener("click", async () => {
   }
 });
 
+animateLists($("feed"), $("emList"), $("mostList"));
 loadPlaces().catch(() => {});
 loadPublic().catch(() => {});
 setInterval(() => loadPublic().catch(() => {}), 30000);
@@ -618,6 +619,7 @@ function showTicket(c) {
       <button type="button" class="send" data-act="close" style="margin-top:4px">ठीक है</button>
     </div></div>`;
   document.body.append(back);
+  if (c.status !== "rejected") celebrate();
   const close = () => back.remove();
   back.addEventListener("click", async (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;

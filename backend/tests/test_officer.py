@@ -287,3 +287,74 @@ def test_a_complaint_without_a_pin_shows_its_supporters_pin(client, store):
     queue = client.get("/api/officer/queue", headers=headers(client, "roads.officer", "road-pass")).json()
     loc = next(c for c in queue if c["id"] == parent)["location"]
     assert loc == {"lat": 26.311235, "lon": 87.260094, "accuracy": 11, "from_supporter": True}
+
+
+def test_a_wrong_fix_is_reopened_with_a_reason_and_seen_in_closed_work(client, store, open_model):
+    cid = add(store)
+    h = headers(client, "roads.officer", "road-pass")
+    client.post(f"/api/officer/complaints/{cid}/status", headers=h, json={"status": "resolved", "note": "bhar diya"})
+    closed = client.get("/api/officer/queue?closed=1", headers=h).json()
+    assert [c["id"] for c in closed] == [cid]
+    assert client.post(f"/api/officer/complaints/{cid}/status", headers=h, json={"status": "reopened"}).status_code == 400
+    r = client.post(f"/api/officer/complaints/{cid}/status", headers=h,
+                    json={"status": "reopened", "note": "site par gaddha abhi bhi hai"})
+    assert r.status_code == 200
+    assert store.get(cid)["status"] == "open"
+    assert [u["status"] for u in client.get(f"/api/complaints/{cid}/track").json()["updates"]] == ["resolved", "reopened"]
+    assert cid in [c["id"] for c in client.get("/api/officer/queue", headers=h).json()]
+
+
+def test_queue_flags_work_left_idle_too_long(client, store):
+    old = add(store)
+    store._db.execute("UPDATE complaints SET created_at = '2026-01-01T00:00:00+00:00' WHERE id = ?", (old,))
+    store._db.commit()
+    fresh = add(store)
+    q = {c["id"]: c for c in client.get("/api/officer/queue", headers=headers(client, "roads.officer", "road-pass")).json()}
+    assert q[old]["overdue"] is True and q[old]["idle_days"] > 3
+    assert q[fresh]["overdue"] is False
+
+
+def test_export_is_a_spreadsheet_excel_reads_in_hindi(client, store):
+    add(store)
+    r = client.get("/api/officer/export.csv", headers=headers(client, "roads.officer", "road-pass"))
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    text = r.content.decode("utf-8")
+    assert text.startswith("﻿id,filed_at") and TITLE in text
+    assert client.get("/api/officer/export.csv").status_code == 401
+
+
+def test_only_a_reporter_can_say_it_is_not_fixed(client, store, open_model, tmp_path, monkeypatch):
+    from backend.app import config
+    from backend.app.privacy import contact_hash
+
+    monkeypatch.setattr(config.settings, "data_dir", tmp_path)
+    salt = config.settings.contact_salt
+    cid = store.add(text="gaddha", area="Ward 5", has_photo=False, status="open", category="roads", urgency="medium",
+                    duplicate_of=None, decision={"title_hi": TITLE}, trace=[], contact=contact_hash("9876543210", salt))
+    child = store.add(text="wahi gaddha", area="Ward 5", has_photo=False, status="merged", category="roads",
+                      urgency="medium", duplicate_of=cid, decision={"title_hi": TITLE}, trace=[],
+                      contact=contact_hash("9123456789", salt))
+    body = {"mobile": "9123456789", "note": "gaddha abhi bhi hai, call 9988776655"}
+    assert client.post(f"/api/complaints/{child}/dispute", json=body).status_code == 409  # not marked fixed yet
+    client.post(f"/api/officer/complaints/{cid}/status", headers=headers(client, "roads.officer", "road-pass"),
+                json={"status": "resolved", "note": "theek"})
+    assert client.post(f"/api/complaints/{cid}/dispute", json={"mobile": "9000000000"}).status_code == 403
+    r = client.post(f"/api/complaints/{child}/dispute", json=body)  # a merged supporter may dispute too
+    assert r.status_code == 200 and store.get(cid)["status"] == "open"
+    assert "9988776655" not in r.text and "छिपाया" in r.text
+
+
+def test_work_moves_forward_stage_by_stage_and_the_citizen_sees_each(client, store, open_model):
+    cid = add(store)
+    h = headers(client, "roads.officer", "road-pass")
+    step = lambda s, note="": client.post(f"/api/officer/complaints/{cid}/status", headers=h, json={"status": s, "note": note})
+    assert step("inspected", "JE ne site dekhi").status_code == 200
+    assert (store.get(cid)["status"], store.get(cid)["stage"]) == ("in_progress", "inspected")
+    assert step("inspected").status_code == 409  # no going back or repeating
+    assert step("approved", "patch ka kaam manzoor").status_code == 200
+    track = client.get(f"/api/complaints/{cid}/track").json()
+    assert track["stage"] == "approved" and [u["status"] for u in track["updates"]] == ["inspected", "approved"]
+    assert step("resolved", "bhar diya").status_code == 200  # skipping 'work started' is allowed
+    assert (store.get(cid)["status"], store.get(cid)["stage"]) == ("resolved", "resolved")
+    assert step("reopened", "phir se gaddha").status_code == 200
+    assert (store.get(cid)["status"], store.get(cid)["stage"]) == ("open", None)

@@ -1,6 +1,6 @@
 import {
   $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mapLink, mountChrome, plusCode,
-  shrinkPhoto, STATUS, takePhoto, TOUCH,
+  animateLists, celebrate, shrinkPhoto, STATUS, takePhoto, TOUCH, WORK_STAGES,
   starsHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
@@ -11,11 +11,16 @@ $("headerExtra").innerHTML = `<div class="who" id="who" hidden></div>`;
 
 const SCOPES = { ...DEPARTMENTS, all: "सभी विभाग (ज़िला)" };
 // What an officer can do next from each state; mirrors TRANSITIONS on the server.
+// Open and in-progress work moves through the stage track (see stageTrack); these are the other moves.
 const ACTIONS = {
-  open: [["in_progress", "काम शुरू"], ["resolved", "हल हो गई"], ["rejected", "बंद करें"]],
-  in_progress: [["resolved", "हल हो गई"]],
+  open: [["rejected", "बंद करें"]],
+  in_progress: [],
   needs_review: [["open", "विभाग को भेजें"], ["rejected", "बंद करें"]],
+  // a wrong 'fixed' or a wrong closing is undone here, with a reason
+  resolved: [["reopened", "↩️ फिर से खोलें"]],
+  rejected: [["reopened", "↩️ फिर से खोलें"]],
 };
+const OVERDUE_TEXT = { open: "काम शुरू नहीं हुआ", in_progress: "कोई नया अपडेट नहीं", needs_review: "जाँच नहीं हुई" };
 // Donut slices: label and colour per status (kept in step with the tile tones in style.css).
 const SLICES = [
   ["open", "खुली", "#7aa7ff"],
@@ -24,8 +29,19 @@ const SLICES = [
   ["needs_review", "जाँच बाकी", "#a9b6ff"],
   ["rejected", "बंद", "#7c8098"],
 ];
-// Only work started or finished can carry a photo of the work (the server checks the same).
-const PROOF_STATES = ["in_progress", "resolved"];
+// Any stage of the work can carry a photo of it (the server checks the same).
+const PROOF_STATES = ["inspected", "approved", "in_progress", "resolved"];
+
+/** Where the work stands, and a button for each stage still ahead: done ones ticked, the next one glowing. */
+function stageTrack(c) {
+  if (!["open", "in_progress"].includes(c.status)) return "";
+  const at = c.status === "open" ? -1 : WORK_STAGES.findIndex(([k]) => k === (c.stage || "in_progress"));
+  const now = at >= 0 ? WORK_STAGES[at][3] : "अभी कोई कदम नहीं — शिकायत दर्ज है";
+  return `<div class="stage-track">${WORK_STAGES.map(([k, icon, short], i) => i <= at
+    ? `<button type="button" class="stage-btn done" disabled><span>${icon}</span>${short}</button>`
+    : `<button type="button" class="act stage-btn ${i === at + 1 ? "next" : ""}" data-status="${k}"><span>${icon}</span>${short}</button>`).join("")}</div>
+    <p class="stage-hint">अभी: <b>${now}</b> · अगला कदम चुनें — हर कदम नागरिक को दिखेगा</p>`;
+}
 const REFRESH_MS = 30000;
 
 let token = null;
@@ -126,7 +142,9 @@ function renderKpis(k) {
     ["warn", "औसत समाधान (दिन)", k.avg_days ?? 0],
     [k.unheard ? "bad" : "", "अनसुनी", k.unheard],
   ];
-  $("kpis").innerHTML = tiles.map(([tone, label]) => `<div class="kpi ${tone}"><b>0</b><span>${label}</span></div>`).join("");
+  const jump = ["all", "all", "closed", "closed", "closed", "unheard"];
+  $("kpis").innerHTML = tiles.map(([tone, label], i) =>
+    `<button type="button" class="kpi ${tone}" data-jump="${jump[i]}" title="नीचे सूची में देखें"><b>0</b><span>${label}</span><i class="go">सूची देखें →</i></button>`).join("");
   [...$("kpis").querySelectorAll("b")].forEach((b, i) => countUp(b, tiles[i][2]));
 }
 
@@ -203,7 +221,8 @@ function renderPublic(s) {
 
 function actionsHtml(c) {
   const actions = ACTIONS[c.status] || [];
-  if (!actions.length) return "";
+  const track = stageTrack(c);
+  if (!actions.length && !track) return "";
   const routing = c.status === "needs_review"
     ? `<label>किस विभाग को भेजें</label><select data-role="category">${Object.entries(DEPARTMENTS)
         .map(([k, v]) => `<option value="${k}">${esc(v)}</option>`).join("")}</select>`
@@ -212,13 +231,14 @@ function actionsHtml(c) {
     ${routing}
     <label>नोट (नागरिक को सरल हिंदी में बताया जाएगा)</label>
     <textarea data-role="note" rows="2" maxlength="500" placeholder="जैसे: JE ne site dekh li, kal se kaam shuru"></textarea>
-    ${actions.some(([s]) => PROOF_STATES.includes(s)) ? `<div class="proof-pick">
+    ${track}
+    ${track || actions.some(([s]) => PROOF_STATES.includes(s)) ? `<div class="proof-pick">
       <button type="button" class="pick-btn" data-role="cam">📷 कैमरा</button>
       <input type="file" accept="image/*" capture="environment" data-role="proofcam" hidden>
       <label class="pick-btn alt">🖼️ गैलरी<input type="file" accept="image/*" data-role="proof" hidden></label>
       <span class="hint" data-role="proofName">ज़रूरी नहीं — नागरिक को काम होता दिखेगा</span></div>` : ""}
-    <div class="action-buttons">${actions.map(([status, label]) =>
-      `<button type="button" class="act ${status}" data-status="${status}">${label}</button>`).join("")}</div>
+    ${actions.length ? `<div class="action-buttons">${actions.map(([status, label]) =>
+      `<button type="button" class="act ${status}" data-status="${status}">${label}</button>`).join("")}</div>` : ""}
     <p class="status" data-role="msg"></p>
   </div>`;
 }
@@ -228,11 +248,15 @@ function itemHtml(c) {
   const updates = (c.updates || []).map((u) =>
     `<li><time>${esc(formatTime(u.created_at))}</time> <b>${esc(STATUS[u.status] || u.status)}</b> — ${esc(u.message_hi)}
       ${u.photo ? `<a href="/api/updates/${u.id}/photo" target="_blank" rel="noopener">📷 फ़ोटो</a>` : ""}</li>`).join("");
-  return `<article class="card item ${esc(c.urgency || "")}" data-id="${c.id}">
+  const late = c.overdue
+    ? `<p class="late">⏰ ${Math.floor(c.idle_days)} दिन से ${OVERDUE_TEXT[c.status] || "कोई कार्रवाई नहीं"} — जल्दी देखें</p>` : "";
+  const reopened = (c.updates || []).some((u) => u.status === "reopened");
+  return `<article class="card item ${esc(c.urgency || "")} ${c.overdue ? "is-late" : ""}" data-id="${c.id}">
     <div class="item-head">
       <h3>#${c.id} ${esc(d.title_hi || c.text.slice(0, 80))}</h3>
       <span class="status">${esc(age(c.created_at))}</span>
     </div>
+    ${late}${reopened ? `<p class="late reopen">↩️ यह शिकायत पहले "हल" की गई थी, फिर से खोली गई है</p>` : ""}
     <div class="badges">
       ${c.urgency ? `<span class="badge ${esc(c.urgency)}">${esc(URGENCY[c.urgency])}</span>` : ""}
       <span class="badge ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>
@@ -255,31 +279,64 @@ function itemHtml(c) {
   </article>`;
 }
 
+const unheard = (c) => c.status === "open" && !(c.updates || []).length;
+const TESTS = {
+  all: () => true,
+  open: (c) => c.status === "open",
+  overdue: (c) => c.overdue,
+  unheard,
+  critical: (c) => c.urgency === "critical",
+  high: (c) => c.urgency === "high",
+  in_progress: (c) => c.status === "in_progress",
+  needs_review: (c) => c.status === "needs_review",
+  closed: () => true,
+};
+const SORTS = {
+  idle: (a, b) => b.idle_days - a.idle_days,
+  oldest: (a, b) => a.created_at.localeCompare(b.created_at),
+  people: (a, b) => b.supporters - a.supporters,
+};
+let closedQueue = [];
+
 function matches(c) {
-  if (filter === "critical" || filter === "high") { if (c.urgency !== filter) return false; }
-  else if (filter !== "all" && c.status !== filter) return false;
-  const q = $("search").value.trim().toLowerCase();
+  if (!TESTS[filter](c)) return false;
+  const q = $("search").value.trim().toLowerCase().replace(/^#/, "");
   if (!q) return true;
   const d = c.decision || {};
-  return `${c.text} ${c.area} ${d.title_hi || ""} ${d.title_en || ""}`.toLowerCase().includes(q);
+  return String(c.id) === q || `${c.text} ${c.area} ${d.title_hi || ""} ${d.title_en || ""}`.toLowerCase().includes(q);
 }
 
 function renderQueue() {
-  const shown = queue.filter(matches);
-  $("queueCount").textContent = shown.length === queue.length ? `(${queue.length})` : `(${shown.length} / ${queue.length})`;
+  const source = filter === "closed" ? closedQueue : queue;
+  const shown = source.filter(matches);
+  const sort = SORTS[$("sort").value];
+  if (sort) shown.sort(sort);
+  document.querySelectorAll("#filters [data-count]").forEach((b) => {
+    const k = b.dataset.count;
+    const n = k === "closed" ? closedQueue.length : queue.filter(TESTS[k]).length;
+    b.textContent = n;
+  });
+  $("queueCount").textContent = `(${shown.length})`;
   $("queue").innerHTML = shown.length
     ? shown.map(itemHtml).join("")
-    : `<p class="card empty">${queue.length ? "इस फ़िल्टर में कुछ नहीं।" : "🎉 सब काम पूरा। कोई खुली शिकायत नहीं है।"}</p>`;
+    : `<p class="card empty">${filter === "overdue" ? "👏 कोई काम देर से नहीं रुका।" : source.length ? "इस फ़िल्टर में कुछ नहीं।" : "🎉 सब काम पूरा। कोई खुली शिकायत नहीं है।"}</p>`;
+}
+
+function setFilter(name) {
+  filter = name;
+  document.querySelectorAll("#filters .chip").forEach((c) => c.setAttribute("aria-pressed", String(c.dataset.filter === name)));
+  renderQueue();
 }
 
 async function refresh() {
   // Never re-render under an officer who is typing a note.
   if (document.activeElement && document.activeElement.closest(".actions")) return;
   if ([...document.querySelectorAll(".actions")].some((b) => b._proof)) return;
-  const [stats, items, ins, pub] = await Promise.all([
+  const [stats, items, ins, pub, done] = await Promise.all([
     api("/api/officer/stats"), api("/api/officer/queue"), api(`/api/officer/insights?days=${days}`),
-    fetch("/api/public/stats").then((r) => r.json()),
+    fetch("/api/public/stats").then((r) => r.json()), api("/api/officer/queue?closed=1"),
   ]);
+  closedQueue = done;
   $("donut").innerHTML = donutHtml(stats.by_status);
   // Re-draw the analysis only when it changed, so the animations do not replay every 30 seconds.
   if (firstPaint || JSON.stringify(ins) !== JSON.stringify(insight)) renderInsights(ins);
@@ -296,6 +353,11 @@ async function act(button) {
   const note = box.querySelector('[data-role="note"]').value.trim();
   const category = box.querySelector('[data-role="category"]')?.value;
   const msg = box.querySelector('[data-role="msg"]');
+  if (button.dataset.status === "reopened" && !note) {
+    msg.textContent = "↩️ फिर से खोलने का कारण नोट में लिखिए — यह नागरिक को भी दिखेगा।";
+    box.querySelector('[data-role="note"]').focus();
+    return;
+  }
   box.querySelectorAll("button").forEach((b) => (b.disabled = true));
   msg.textContent = "नागरिक के लिए संदेश लिखा जा रहा है…";
   try {
@@ -311,6 +373,7 @@ async function act(button) {
       msg.textContent = msg.textContent.replace(" · फ़ोटो जोड़ी जा रही है…", " · 📷 फ़ोटो जुड़ गई");
     }
     toast(`✓ #${item.dataset.id}: नागरिक को संदेश भेजा गया`, "ok");
+    if (button.dataset.status === "resolved") celebrate();
     setTimeout(() => { document.activeElement?.blur(); refresh(); }, 2500);
   } catch (err) {
     msg.textContent = "नहीं हुआ: " + err.message;
@@ -351,11 +414,25 @@ $("queue").addEventListener("click", (e) => {
 });
 $("filters").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
-  if (!chip) return;
-  filter = chip.dataset.filter;
-  document.querySelectorAll("#filters .chip").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
-  renderQueue();
+  if (chip) setFilter(chip.dataset.filter);
 });
+$("kpis").addEventListener("click", (e) => {
+  const tile = e.target.closest("[data-jump]");
+  if (!tile) return;
+  setFilter(tile.dataset.jump);
+  $("queueSection").scrollIntoView({ behavior: "smooth", block: "start" });
+});
+$("sort").addEventListener("change", renderQueue);
+$("export").addEventListener("click", async () => {
+  const r = await fetch("/api/officer/export.csv", { headers: { Authorization: `Bearer ${token || ""}` } });
+  if (!r.ok) { toast("फ़ाइल नहीं बन पाई", "bad"); return; }
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(await r.blob());
+  a.download = `awaaz-complaints-${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  toast("⬇️ फ़ाइल डाउनलोड हो रही है — Excel में खोलें", "ok");
+});
+animateLists($("queue"), $("list"));
 $("search").addEventListener("input", renderQueue);
 $("presets").addEventListener("click", async (e) => {
   const chip = e.target.closest(".chip");

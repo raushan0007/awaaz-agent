@@ -1,5 +1,6 @@
 import {
-  $, chakraHtml, esc, formatTime, hoursText, ICON, mountChrome, myTickets, starsHtml, STATUS, stepperHtml, URGENCY, WAVES,
+  $, animateLists, celebrate, chakraHtml, esc, formatTime, hoursText, ICON, mountChrome, myTickets, starsHtml, STATUS,
+  stepperHtml, URGENCY, WAVES,
 } from "./shared.js";
 
 mountChrome("track");
@@ -44,7 +45,7 @@ async function show(id) {
       <div class="ticket-no"><small>शिकायत संख्या</small><b>#${t.id}</b></div>
     </div>
     <div class="ticket-body">
-      ${stepperHtml(t.status)}
+      ${stepperHtml(t.status, t.stage)}
       <div class="badges">
         ${t.department_hi ? `<span class="badge dept">🏛️ ${esc(t.department_hi)}</span>` : ""}
         ${t.urgency ? `<span class="badge ${esc(t.urgency)}">${esc(URGENCY[t.urgency] || t.urgency)}</span>` : ""}
@@ -57,7 +58,36 @@ async function show(id) {
       <h3 class="section-title">शिकायत का पूरा सफ़र</h3>
       ${noReply}
       ${updates}
+      ${t.status === "resolved" ? `<form class="dispute" id="dispute">
+        <h3>❌ अभी हल नहीं हुआ?</h3>
+        <p class="hint" style="margin:0 0 8px">अगर समस्या अब भी है, तो वही मोबाइल नंबर डालिए जो शिकायत में दिया था — शिकायत फिर से खुल जाएगी और विभाग को दोबारा जाएगी।</p>
+        <input id="dMobile" type="tel" inputmode="numeric" maxlength="14" placeholder="शिकायत वाला मोबाइल नंबर" required>
+        <textarea id="dNote" rows="2" maxlength="500" placeholder="क्या अब भी गड़बड़ है? (ज़रूरी नहीं)" style="margin-top:8px"></textarea>
+        <button class="send" type="submit" style="margin-top:10px">↩️ शिकायत फिर से खोलें</button>
+        <p class="status" id="dMsg"></p>
+      </form>` : ""}
     </div>`;
+  animateLists(el.querySelector(".timeline"));
+  // a fixed problem is worth a moment of celebration, once per ticket on this phone
+  try {
+    if (t.status === "resolved" && !sessionStorage.getItem(`awaaz-cheer-${t.id}`)) {
+      sessionStorage.setItem(`awaaz-cheer-${t.id}`, "1");
+      celebrate();
+    }
+  } catch { /* private mode */ }
+  $("dispute")?.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    $("dMsg").textContent = "जाँच रहे हैं…";
+    const r = await fetch(`/api/complaints/${t.id}/dispute`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ mobile: $("dMobile").value.trim(), note: $("dNote").value.trim() }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (r.ok) { show(t.id); return; }
+    $("dMsg").textContent = r.status === 403
+      ? "यह नंबर इस शिकायत से नहीं जुड़ा। बिना नंबर वाली शिकायत के लिए नई शिकायत दर्ज करें — वह इसी से जुड़ जाएगी।"
+      : body.detail || "अभी नहीं हो पाया।";
+  });
 }
 
 $("lookup").addEventListener("submit", (e) => {
@@ -80,6 +110,7 @@ function mineHtml(list) {
     <small>${t.status ? esc(STATUS[t.status] || t.status) : esc(formatTime(t.at))}</small></a>`).join("")
     : `<p class="hint" style="margin:0">इस फ़ोन से अभी कोई शिकायत नहीं।</p>`;
 }
+animateLists($("mine"), $("mineByMobile"));
 $("mine").innerHTML = mineHtml(myTickets());
 
 $("byMobile").addEventListener("submit", async (e) => {

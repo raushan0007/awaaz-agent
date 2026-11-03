@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import csv
+import io
 import os
 from datetime import datetime, timezone
 from pathlib import Path
@@ -9,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
@@ -269,6 +271,7 @@ def track_complaint(complaint_id: int) -> dict:
         "created_at": c["created_at"],
         "filed_at": main_c["created_at"],
         "status": main_c["status"],
+        "stage": main_c.get("stage"),
         "title_hi": decision.get("title_hi", ""),
         "department_hi": dept["name_hi"] if dept else "",
         "category": main_c["category"],
@@ -286,6 +289,33 @@ def track_complaint(complaint_id: int) -> dict:
 
 class MobileBody(BaseModel):
     mobile: str = Field(min_length=10, max_length=20)
+
+
+class DisputeBody(MobileBody):
+    note: str = Field("", max_length=500)
+
+
+@app.post("/api/complaints/{complaint_id}/dispute")
+def dispute(complaint_id: int, body: DisputeBody) -> dict:
+    """'It is not fixed': reopens a complaint marked fixed, but only for someone who reported it, proven by
+    the same mobile number (matched by fingerprint), so nobody can reopen other people's complaints."""
+    store = get_store()
+    c = store.get(complaint_id)
+    if c is None:
+        raise HTTPException(404, "No such complaint.")
+    main_id = c["duplicate_of"] or c["id"]
+    main_c = store.get(main_id)
+    if main_c["status"] != "resolved":
+        raise HTTPException(409, "Only a complaint marked fixed can be reopened.")
+    number = normalize_mobile(body.mobile)
+    if number is None or contact_hash(number, settings.contact_salt) not in store.contact_hashes(main_id):
+        raise HTTPException(403, "Use the mobile number given when this problem was reported.")
+    note, _ = mask_pii(body.note.strip())
+    message = ("आपने बताया कि समस्या अभी हल नहीं हुई है। शिकायत फिर से खोल दी गई है और विभाग को दोबारा भेजी गई है।"
+               + (f" आपकी बात: “{note}”" if note else ""))
+    store.add_update(main_id, "reopened", note or "citizen: not fixed", message, "citizen")
+    store.set_status(main_id, "open")
+    return {"id": main_id, "status": "open", "message_hi": message}
 
 
 @app.post("/api/my-complaints")
@@ -306,7 +336,7 @@ class LoginBody(BaseModel):
 
 
 class StatusBody(BaseModel):
-    status: Literal["in_progress", "resolved", "rejected", "open"]
+    status: Literal["inspected", "approved", "in_progress", "resolved", "rejected", "open", "reopened"]
     note: str = Field("", max_length=500)
     category: str | None = None  # only when routing a needs_review complaint
 
@@ -334,12 +364,39 @@ def officer_me(officer: dict = Depends(current_officer)) -> dict:
 
 
 @app.get("/api/officer/queue")
-def officer_queue(officer: dict = Depends(current_officer)) -> list[dict]:
+def officer_queue(closed: bool = False, officer: dict = Depends(current_officer)) -> list[dict]:
+    """Open work (or, with closed=1, what was fixed or closed in the last 30 days), each with how long it
+    has waited since anyone last acted on it."""
     store = get_store()
-    items = store.queue(officer["department"])
+    items = store.closed(officer["department"]) if closed else store.queue(officer["department"])
+    now = datetime.now(timezone.utc)
     for c in items:
         c["updates"] = store.updates(c["id"])
+        last = c["updates"][-1]["created_at"] if c["updates"] else c["created_at"]
+        c["idle_days"] = round((now - datetime.fromisoformat(last)).total_seconds() / 86400, 1)
+        limit = OVERDUE_DAYS.get(c["status"])
+        c["overdue"] = limit is not None and c["idle_days"] > limit
     return items
+
+
+# Days a complaint may sit without any action before it is flagged as running late.
+OVERDUE_DAYS = {"open": 3, "in_progress": 7, "needs_review": 2}
+
+
+@app.get("/api/officer/export.csv")
+def officer_export(officer: dict = Depends(current_officer)) -> Response:
+    """The open queue and the last 30 days' closed work as a spreadsheet (UTF-8 with BOM, so Excel shows Hindi)."""
+    rows = officer_queue(False, officer) + officer_queue(True, officer)
+    out = io.StringIO()
+    w = csv.writer(out)
+    w.writerow(["id", "filed_at", "area", "department", "urgency", "status", "people", "updates",
+                "idle_days", "overdue", "title_hi"])
+    for c in rows:
+        w.writerow([c["id"], c["created_at"], c["area"], c["category"] or "", c["urgency"] or "", c["status"],
+                    c["supporters"], len(c["updates"]), c["idle_days"], "yes" if c["overdue"] else "",
+                    (c["decision"] or {}).get("title_hi", "")])
+    return Response("\ufeff" + out.getvalue(), media_type="text/csv; charset=utf-8",
+                    headers={"Content-Disposition": 'attachment; filename="awaaz-complaints.csv"'})
 
 
 @app.get("/api/officer/stats")
@@ -367,10 +424,16 @@ def places() -> list[dict]:
 
 
 # Which moves an officer may make from each state.
+# The work moves forward one stage at a time (skipping ahead is allowed, going back only by reopening).
+STAGES = ["inspected", "approved", "in_progress", "resolved"]
+
 TRANSITIONS = {
-    "open": {"in_progress", "resolved", "rejected"},
-    "in_progress": {"resolved"},
+    "open": {*STAGES, "rejected"},
+    "in_progress": set(STAGES),  # narrowed to the stages after the current one below
     "needs_review": {"open", "rejected"},
+    # a 'fixed' that was not fixed, or a wrong closing, can be undone with a reason
+    "resolved": {"reopened"},
+    "rejected": {"reopened"},
 }
 
 
@@ -383,10 +446,14 @@ def officer_set_status(complaint_id: int, body: StatusBody, officer: dict = Depe
         raise HTTPException(404, "No such complaint.")
     if not auth.can_act_on(officer, c):
         raise HTTPException(403, "This complaint belongs to another department.")
-    if body.status not in TRANSITIONS.get(c["status"], set()):
-        raise HTTPException(409, f"Cannot move a complaint from '{c['status']}' to '{body.status}'.")
-    if body.status == "rejected" and not body.note.strip():
-        raise HTTPException(400, "Give a reason when closing a complaint.")
+    allowed = TRANSITIONS.get(c["status"], set())
+    if c["status"] == "in_progress":
+        current = c.get("stage") or "in_progress"
+        allowed = set(STAGES[STAGES.index(current) + 1:])
+    if body.status not in allowed:
+        raise HTTPException(409, f"Cannot move a complaint from '{c.get('stage') or c['status']}' to '{body.status}'.")
+    if body.status in ("rejected", "reopened") and not body.note.strip():
+        raise HTTPException(400, "Give a reason when closing or reopening a complaint.")
     if c["status"] == "needs_review" and body.status == "open":
         if body.category not in CATEGORIES:
             raise HTTPException(400, "Pick the department to route this complaint to.")
@@ -396,11 +463,16 @@ def officer_set_status(complaint_id: int, body: StatusBody, officer: dict = Depe
     note = body.note.strip()
     message, source = status_writer.write_message(c, body.status, note)
     update_id = store.add_update(complaint_id, body.status, note, message, officer["username"])
+    if body.status == "reopened":
+        store.set_status(complaint_id, "open")  # back in the queue; the update keeps the 'reopened' mark
+    elif body.status in STAGES:
+        # inspected and approved are steps of work in progress; the complaint remembers which one
+        store.set_status(complaint_id, "resolved" if body.status == "resolved" else "in_progress", body.status)
     return {"id": complaint_id, "update_id": update_id, "status": body.status, "message_hi": message,
             "written_by": source}
 
 
-PROOF_STATES = ("in_progress", "resolved")
+PROOF_STATES = ("inspected", "approved", "in_progress", "resolved")
 
 
 @app.post("/api/officer/updates/{update_id}/photo")

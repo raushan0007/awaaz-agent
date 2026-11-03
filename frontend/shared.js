@@ -12,7 +12,18 @@ export const STATUS = {
   merged: "पहले से दर्ज शिकायत से जोड़ी गई",
   rejected: "स्वीकार नहीं हुई",
   needs_review: "अधिकारी जाँच करेंगे",
+  reopened: "फिर से खोली गई",
+  inspected: "मौके की जाँच हुई",
+  approved: "काम मंज़ूर, टीम तय",
 };
+
+/** The work, step by step: what the officer moves forward and what the citizen watches. */
+export const WORK_STAGES = [
+  ["inspected", "🔍", "जाँच", "मौके की जाँच हो गई"],
+  ["approved", "📋", "मंज़ूरी", "काम मंज़ूर / टीम तय"],
+  ["in_progress", "🔧", "काम चालू", "काम शुरू हो गया"],
+  ["resolved", "✅", "हल", "हल हो गई"],
+];
 export const URGENCY = { low: "कम ज़रूरी", medium: "सामान्य", high: "ज़रूरी", critical: "बहुत ज़रूरी" };
 
 export const CATEGORY = {
@@ -97,6 +108,31 @@ export function toast(message, tone = "") {
 }
 
 // --- motion ------------------------------------------------------------------------------------------
+
+// Two small open-source libraries, loaded on demand and never required: if the CDN is unreachable the page
+// works exactly the same, just without these touches.
+//   AutoAnimate (FormKit, MIT) - lists rearrange smoothly when filtered or sorted.
+//   canvas-confetti (ISC) - a short burst when a problem is fixed.
+const AUTO_ANIMATE = "https://cdn.jsdelivr.net/npm/@formkit/auto-animate@0.8.2/index.mjs";
+const CONFETTI = "https://cdn.jsdelivr.net/npm/canvas-confetti@1.9.3/dist/confetti.module.mjs";
+
+export async function animateLists(...els) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  try {
+    const { default: autoAnimate } = await import(AUTO_ANIMATE);
+    els.filter(Boolean).forEach((el) => autoAnimate(el, { duration: 280 }));
+  } catch { /* fine without it */ }
+}
+
+export async function celebrate() {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  try {
+    const { default: confetti } = await import(CONFETTI);
+    const colors = ["#ff9933", "#ffffff", "#138808", "#0a2a8a"];
+    confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 }, colors });
+    setTimeout(() => confetti({ particleCount: 60, spread: 100, origin: { y: 0.6 }, colors }), 250);
+  } catch { /* fine without it */ }
+}
 
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -368,14 +404,18 @@ export function timeAgo(iso) {
 
 // --- shared renderers -----------------------------------------------------------------------------
 
-const FLOW = [["open", "दर्ज"], ["routed", "विभाग को"], ["in_progress", "काम चालू"], ["resolved", "हल"]];
+const FLOW = ["दर्ज", "विभाग को", ...WORK_STAGES.map(([, , short]) => short)];
 
-/** Four-step progress: filed -> with the department -> work started -> fixed. */
-export function stepperHtml(status) {
-  const reached = { open: 1, merged: 1, in_progress: 2, resolved: 3 }[status];
+/** Six-step progress: filed -> with the department -> inspected -> approved -> work started -> fixed. */
+export function stepperHtml(status, stage) {
+  let reached;
+  // steps up to the current one are done; the one after it is "now"
+  if (status === "resolved") reached = FLOW.length;
+  else if (status === "in_progress") reached = 3 + WORK_STAGES.findIndex(([k]) => k === (stage || "in_progress"));
+  else if (status === "open" || status === "merged") reached = 2;
   if (reached === undefined) return "";
-  return `<ol class="stepper">${FLOW.map(([, label], i) =>
-    `<li class="${i < reached || status === "resolved" ? "done" : i === reached ? "now" : ""}">${label}</li>`).join("")}</ol>`;
+  return `<ol class="stepper six">${FLOW.map((label, i) =>
+    `<li class="${i < reached ? "done" : i === reached ? "now" : ""}">${label}</li>`).join("")}</ol>`;
 }
 
 // SAM 3.1 boxes are in image pixels; each mask is box-sized with a box-local path, so translate it into place.
