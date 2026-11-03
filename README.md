@@ -215,3 +215,7 @@ when the visitor's device asks for reduced motion.
 - Towns and departments are hard-coded (`backend/app/departments.py`); a real rollout would load them per district.
 - SQLite and a single server process are enough for a district, not a state.
 - Citizens get updates on the tracking page only; SMS/WhatsApp delivery is the obvious next step.
+
+## License
+
+[MIT](LICENSE) © 2026 raushan0007. Use, change and share it freely; keep the licence notice with it.
