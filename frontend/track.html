@@ -16,13 +16,13 @@
     <section class="card hero">
       <span class="eyebrow">शिकायत का हाल</span>
       <h1>आपकी शिकायत कहाँ तक पहुँची?</h1>
-      <p>शिकायत संख्या डालिए। विभाग जो भी करेगा, उसकी जानकारी यहाँ सरल हिंदी में मिलेगी।</p>
+      <p>अपना ट्रैकिंग कोड डालिए। विभाग जो भी करेगा, उसकी जानकारी यहाँ सरल हिंदी में मिलेगी।</p>
     </section>
     <section class="card">
       <form id="lookup">
-        <label for="cid">शिकायत संख्या</label>
+        <label for="cid">ट्रैकिंग कोड या शिकायत संख्या</label>
         <div class="row">
-          <input id="cid" type="text" inputmode="numeric" pattern="[0-9]*" placeholder="जैसे: 12">
+          <input id="cid" type="text" autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="20" placeholder="जैसे: AWZ-7K3M-Q2XP या 12">
           <button class="send small" type="submit">देखें</button>
         </div>
       </form>

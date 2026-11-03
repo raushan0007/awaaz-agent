@@ -424,12 +424,25 @@ const TREND = { ...STATUS_COLOUR, filed: "#ff6fa5", fixed: STATUS_COLOUR.resolve
 const num = (v) => (Number.isFinite(v) ? v : 0);
 
 /** One day's numbers as the tooltip lists them. */
+// A step of the chart is a day ("2026-11-03"), an hour ("2026-11-03T15:00") or 5 minutes ("...T15:05"), in IST.
+const stepTime = (d) => new Date(d.unit && d.unit !== "day" ? `${d.day}:00+05:30` : `${d.day}T12:00:00`);
+const STEP_WORDS = {
+  day: ["उस दिन", "दिन ख़त्म होने पर", "हर दिन आईं और हल हुईं", "दिन ख़त्म होने पर कुल स्थिति"],
+  hour: ["उस घंटे में", "उस घंटे के अंत में", "हर घंटे आईं और हल हुईं", "हर घंटे के अंत में कुल स्थिति"],
+  "5min": ["उन 5 मिनट में", "उस समय तक", "हर 5 मिनट में आईं और हल हुईं", "हर 5 मिनट के अंत में कुल स्थिति"],
+};
+const stepWords = (d) => STEP_WORDS[d?.unit] || STEP_WORDS.day;
+
 function trendTip(d, states) {
-  const date = new Date(d.day + "T12:00:00").toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "long" });
+  const t = stepTime(d);
+  const date = d.unit && d.unit !== "day"
+    ? t.toLocaleString(LOCALE, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" })
+    : t.toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "long" });
+  const [during, atEnd] = stepWords(d);
   const row = (colour, label, v) => `<li><i style="background:${colour}"></i><span>${tr(label)}</span><b>${v}</b></li>`;
   return `<b class="tip-day">${esc(date)}</b>
-    <small>${tr("उस दिन")}</small><ul>${row(TREND.filed, "नई रिपोर्ट", num(d.filed))}${row(TREND.fixed, "हल हुईं", num(d.fixed))}</ul>${states
-    ? `<small>${tr("दिन ख़त्म होने पर")}</small><ul>${row(TREND.open, "खुली", d.open)}${row(TREND.in_progress, "काम चल रहा", d.in_progress)}${row(TREND.resolved, "हल", d.resolved)}</ul>` : ""}`;
+    <small>${tr(during)}</small><ul>${row(TREND.filed, "नई रिपोर्ट", num(d.filed))}${row(TREND.fixed, "हल हुईं", num(d.fixed))}</ul>${states
+    ? `<small>${tr(atEnd)}</small><ul>${row(TREND.open, "खुली", d.open)}${row(TREND.in_progress, "काम चल रहा", d.in_progress)}${row(TREND.resolved, "हल", d.resolved)}</ul>` : ""}`;
 }
 
 /** Two panels over the same days. Top: reports that came in and problems fixed that day, side by side so
@@ -469,7 +482,10 @@ export function mountTrend(el, series) {
     }).join("");
   }).join("");
   const every = Math.ceil(n / (narrow ? 4 : 7));
-  const fmt = (d) => new Date(d.day + "T12:00:00").toLocaleDateString(LOCALE, { day: "numeric", month: "short" });
+  const fmt = (d) => (d.unit && d.unit !== "day"
+    ? stepTime(d).toLocaleTimeString(LOCALE, { hour: "numeric", minute: d.unit === "5min" ? "2-digit" : undefined })
+    : stepTime(d).toLocaleDateString(LOCALE, { day: "numeric", month: "short" }));
+  const [, , topTitle, bottomTitle] = stepWords(series[0]);
   const labels = series.map((d, i) => (i === n - 1 || (i % every === 0 && n - 1 - i >= every * 0.6))
     ? `<text x="${cx(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${fmt(d)}</text>` : "").join("");
   const total = series.reduce((s, d) => [s[0] + num(d.filed), s[1] + num(d.fixed)], [0, 0]);
@@ -478,8 +494,8 @@ export function mountTrend(el, series) {
   el.innerHTML = `<div class="lg">${key("filed", "नई रिपोर्ट", ` <b>${total[0]}</b>`)}${key("fixed", "हल हुईं", ` <b>${total[1]}</b>`)}</div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
     <g class="grid">${grid(a, y1)}${states ? grid(b, y2) : ""}</g>
-    <text class="panel" x="${L}" y="${top1 - 14}">हर दिन आईं और हल हुईं</text>
-    ${states ? `<text class="panel" x="${L}" y="${top2 - 14}">दिन ख़त्म होने पर कुल स्थिति</text>` : ""}
+    <text class="panel" x="${L}" y="${top1 - 14}">${topTitle}</text>
+    ${states ? `<text class="panel" x="${L}" y="${top2 - 14}">${bottomTitle}</text>` : ""}
     <line class="guide" x1="0" x2="0" y1="${top1}" y2="${base2}" hidden/>
     ${bars}${stacks}${labels}
     ${series.map((d, i) => `<rect class="hit" data-i="${i}" x="${(L + slot * i).toFixed(1)}" y="${top1 - 4}" width="${slot.toFixed(1)}" height="${base2 - top1 + 8}"/>`).join("")}
@@ -546,23 +562,42 @@ export function myTickets() {
 export function saveTicket(t) {
   try {
     const list = myTickets().filter((x) => x.id !== t.id);
-    list.unshift({ id: t.id, title: t.title, at: t.at });
+    list.unshift({ id: t.id, code: t.code, title: t.title, at: t.at });
     localStorage.setItem(MINE, JSON.stringify(list.slice(0, 30)));
   } catch { /* private mode: the popup still shows the number */ }
 }
 
+/** A citizen's own ticket opens by its private code; anyone else's only by its public number. */
+export const trackHref = (t) => (t.code ? `/track.html?code=${encodeURIComponent(t.code)}` : `/track.html?id=${t.id}`);
+
+const UNITS = LANG === "en"
+  ? { min: "min", hour: (n) => (n === 1 ? "hour" : "hours"), day: (n) => (n === 1 ? "day" : "days"),
+      month: (n) => (n === 1 ? "month" : "months"), under: "under a minute", ago: "ago", now: "just now" }
+  : { min: "मिनट", hour: () => "घंटे", day: () => "दिन", month: () => "महीने", under: "1 मिनट से कम", ago: "पहले", now: "अभी" };
+
+/** A span of time in the biggest unit that fits: minutes, then hours, then days, then months, with the
+ *  next unit down while it still matters ("2 घंटे 15 मिनट", "1 दिन 6 घंटे", "2 महीने 3 दिन"). */
 export function hoursText(h) {
-  if (h == null) return "–";
-  if (h < 1) return "1 घंटे से कम";
-  if (h < 48) return `${Math.round(h)} घंटे`;
-  return `${Math.round(h / 24)} दिन`;
+  if (h == null || !Number.isFinite(h)) return "–";
+  const u = UNITS, mins = Math.round(h * 60);
+  if (mins < 1) return u.under;
+  if (mins < 60) return `${mins} ${u.min}`;
+  if (h < 24) {
+    const hh = Math.floor(mins / 60), mm = mins % 60;
+    return hh < 6 && mm ? `${hh} ${u.hour(hh)} ${mm} ${u.min}` : `${Math.round(h)} ${u.hour(Math.round(h))}`;
+  }
+  const days = h / 24;
+  if (days < 30) {
+    const dd = Math.floor(days), rh = Math.round(h - dd * 24);
+    return dd < 3 && rh && rh < 24 ? `${dd} ${u.day(dd)} ${rh} ${u.hour(rh)}` : `${Math.round(days)} ${u.day(Math.round(days))}`;
+  }
+  const months = Math.floor(days / 30), rd = Math.round(days - months * 30);
+  return rd ? `${months} ${u.month(months)} ${rd} ${u.day(rd)}` : `${months} ${u.month(months)}`;
 }
 
 export function timeAgo(iso) {
-  const hours = (Date.now() - new Date(iso)) / 36e5;
-  if (hours < 1) return "अभी";
-  if (hours < 24) return `${Math.floor(hours)} घंटे पहले`;
-  return `${Math.floor(hours / 24)} दिन पहले`;
+  const h = (Date.now() - new Date(iso)) / 36e5;
+  return h < 1 / 60 ? UNITS.now : `${hoursText(h)} ${UNITS.ago}`;
 }
 
 // --- shared renderers -----------------------------------------------------------------------------

@@ -2,7 +2,7 @@ import { Recorder } from "./recorder.js";
 import {
   $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
   mountChrome, revealOnScroll,
-  animateLists, celebrate, springIn, donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, mountTrend, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  animateLists, celebrate, springIn, donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, trackHref, starsHtml, mountTrend, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
   LOCALE, tt,
 } from "./shared.js";
 
@@ -194,7 +194,9 @@ function showResult(c) {
       ${d.formal_letter_hi ? `<details><summary>📄 विभाग को भेजा गया पत्र</summary><div class="letter" translate="no">${esc(d.formal_letter_hi)}</div></details>` : ""}
       ${traceHtml(c.trace)}
       ${areaHtml(c.area_summary)}
-      ${c.status !== "rejected" ? `<a class="track-link" href="/track.html?id=${c.id}"><span>शिकायत #${c.id} का आगे का हाल देखें</span><span>→</span></a>` : ""}
+      ${c.code && c.status !== "rejected" ? `<div class="code-box"><small>🔐 आपका ट्रैकिंग कोड</small><b translate="no">${esc(c.code)}</b>
+        <p>इसी कोड से अपनी शिकायत का हाल देखें। यह सिर्फ़ आपके लिए है, किसी और को न दें।</p></div>` : ""}
+      ${c.status !== "rejected" ? `<a class="track-link" href="${trackHref(c)}"><span>शिकायत #${c.id} का आगे का हाल देखें</span><span>→</span></a>` : ""}
     </div>`;
   el.scrollIntoView({ behavior: "smooth", block: "start" });
 }
@@ -594,7 +596,8 @@ function updateSteps() {
 function showTicket(c) {
   const d = c.decision || {};
   const id = c.duplicate_of || c.id;
-  saveTicket({ id: c.id, title: tt(d) || "", at: c.created_at });
+  saveTicket({ id: c.id, code: c.code, title: tt(d) || "", at: c.created_at });
+  // the shared link is the public view; the private code stays with the citizen
   const url = `${location.origin}/track.html?id=${c.id}`;
   const head = c.status === "rejected"
     ? ["⚠️", "शिकायत स्वीकार नहीं हुई"]
@@ -604,7 +607,9 @@ function showTicket(c) {
   back.className = "sheet-back";
   back.innerHTML = `<div class="sheet ${esc(c.status)}" role="dialog" aria-modal="true" aria-label="शिकायत संख्या">
     <div class="sheet-top"><div class="big-tick">${head[0]}</div><small>${esc(head[1])}</small>
-      <div>शिकायत संख्या</div><div class="ticket-big">#${c.id}</div><small>यह नंबर संभालकर रखें</small></div>
+      <div>शिकायत संख्या</div><div class="ticket-big">#${c.id}</div>
+      ${c.code ? `<div class="ticket-code"><small>🔐 आपका ट्रैकिंग कोड</small><b translate="no">${esc(c.code)}</b></div>
+      <small>यह कोड संभालकर रखें — इसी से हाल देखें। किसी और को न दें।</small>` : `<small>यह नंबर संभालकर रखें</small>`}</div>
     <div class="sheet-body">
       ${tt(d) ? `<b>${esc(tt(d))}</b>` : ""}
       <div class="badges" style="margin:0">
@@ -613,9 +618,9 @@ function showTicket(c) {
         <span class="badge">${starsHtml(c.info_level)}</span>
       </div>
       <div class="row3">
-        <button type="button" data-act="copy"><span>📋</span>नंबर कॉपी</button>
+        <button type="button" data-act="copy"><span>📋</span>${c.code ? "कोड कॉपी" : "नंबर कॉपी"}</button>
         <a href="https://wa.me/?text=${encodeURIComponent(share)}" target="_blank" rel="noopener"><span>💬</span>WhatsApp</a>
-        <a href="/track.html?id=${c.id}"><span>🔎</span>हाल देखें</a>
+        <a href="${trackHref(c)}"><span>🔎</span>हाल देखें</a>
       </div>
       <p class="sheet-note">${c.gave_mobile ? "📱 आपके मोबाइल नंबर से आप अपनी सारी शिकायतें “हाल देखें” पेज पर कभी भी देख सकते हैं।" : "यह शिकायत इस फ़ोन में “मेरी शिकायतें” में भी सेव है।"}</p>
       <button type="button" class="send" data-act="close" style="margin-top:4px">ठीक है</button>
@@ -629,8 +634,9 @@ function showTicket(c) {
     const act = e.target.closest("[data-act]")?.dataset.act;
     if (e.target === back || act === "close") close();
     if (act === "copy") {
-      try { await navigator.clipboard.writeText(String(c.id)); toast(`📋 #${c.id} कॉपी हो गया`, "ok"); }
-      catch { toast(`शिकायत संख्या: #${c.id}`); }
+      const what = c.code || `#${c.id}`;
+      try { await navigator.clipboard.writeText(what); toast(`📋 ${what} कॉपी हो गया`, "ok"); }
+      catch { toast(what); }
     }
   });
   back.querySelector('[data-act="close"]').focus();

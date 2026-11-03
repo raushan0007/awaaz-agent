@@ -48,6 +48,8 @@
       <div class="toolbar no-print">
         <h2 style="font-size:24px">🧾 रिपोर्ट <small class="hint" id="period"></small></h2>
         <div class="presets" id="presets">
+          <button class="chip" type="button" data-hours="1" aria-pressed="false">1 घंटा</button>
+          <button class="chip" type="button" data-hours="24" aria-pressed="false">आज (24 घंटे)</button>
           <button class="chip" type="button" data-days="7" aria-pressed="false">7 दिन</button>
           <button class="chip" type="button" data-days="30" aria-pressed="true">30 दिन</button>
           <button class="chip" type="button" data-days="90" aria-pressed="false">90 दिन</button>
@@ -65,7 +67,7 @@
 
       <div class="dash-grid">
         <section class="card trend">
-          <h2>📈 रोज़ का हिसाब: नई, हल और बाकी</h2>
+          <h2 id="trendTitle">📈 रोज़ का हिसाब: नई, हल और बाकी</h2>
           <p class="hint">किसी भी दिन पर माउस ले जाएँ या छुएँ — उस दिन का पूरा हिसाब दिखेगा</p>
           <div id="trend"></div>
         </section>

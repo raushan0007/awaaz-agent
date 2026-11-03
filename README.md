@@ -110,6 +110,10 @@ A failed check or a Baseten outage falls back to a fixed Hindi template, so the 
 - Public pages show each problem's title, department, area, status, timings and photos (the citizen is told
   the photo is public; its location and phone details are stripped first), never the report text, the
   mobile number or the GPS pin.
+- Every report gets a private **tracking code** (`AWZ-XXXX-XXXX`, random, about 850 billion possibilities),
+  shown once to the citizen. The code opens their own report and lets them say "not fixed". The public
+  number (#30) shows only what is public anyway, so trying random numbers reveals nothing private. The code
+  never appears in a public or officer view.
 - Officers see only their department (PBKDF2 passwords, expiring bearer sessions).
 
 ## Try it
@@ -137,6 +141,10 @@ Then open http://localhost:8000/. `python scripts/seed_demo.py` fills an empty d
 **Deploy:** the `Dockerfile` runs anywhere; `render.yaml` is a ready Render blueprint. Set `MODEL_API_KEY`,
 `BASETEN_API_KEY` and `AWAAZ_DEMO_OFFICER_PASSWORD` as secrets; on first start the demo database is loaded
 and a `demo.officer` login is created with that password.
+
+**Hosted demo data:** the free Render plan has no persistent disk, so a restart or redeploy reloads the demo
+database. Complaint numbers then start again from #30, but tracking codes are random, so an old code is
+"not found" and never opens someone else's report. A paid disk or a hosted database removes the reset.
 
 **Spend guard:** every model call is priced and logged per IST day; calls stop with HTTP 429 once
 `AWAAZ_DAILY_BUDGET_USD` (default 3) is reached. Seeding the whole demo cost about $0.46.

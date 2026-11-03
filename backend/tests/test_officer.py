@@ -415,3 +415,26 @@ def test_dashboard_narrows_to_one_department_but_keeps_the_comparison(client, st
     assert client.get("/api/officer/insights?dept=roads", headers=own).status_code == 200
     cell = headers(client, "grievance.officer", "grievance-pass")
     assert client.get("/api/officer/stats?dept=review", headers=cell).status_code == 200
+
+
+def test_short_windows_count_by_the_hour_and_by_five_minutes(client, store):
+    add(store)
+    h = headers(client, "district.officer", "district-pass")
+    hour = client.get("/api/officer/insights?hours=1", headers=h).json()
+    assert hour["hours"] == 1 and len(hour["trend"]) == 12 and hour["trend"][-1]["unit"] == "5min"
+    assert hour["trend"][-1]["filed"] == 1 and hour["kpis"]["issues"] == 1
+    day = client.get("/api/officer/insights?hours=24", headers=h).json()
+    assert len(day["trend"]) == 24 and day["trend"][-1]["unit"] == "hour" and day["trend"][-1]["open"] == 1
+    assert client.get("/api/officer/insights?days=7", headers=h).json()["trend"][-1]["unit"] == "day"
+    assert client.get("/api/officer/stats?hours=1", headers=h).json()["by_status"] == {"open": 1}
+
+
+def test_pulse_names_new_complaints_for_the_bell(client, store):
+    first = add(store)
+    h = headers(client, "roads.officer", "road-pass")
+    assert client.get("/api/officer/pulse", headers=h).json() == {"latest": first, "new": []}
+    second = add(store)
+    add(store, category="water")  # another department: not this officer's bell
+    p = client.get(f"/api/officer/pulse?after={first}", headers=h).json()
+    assert p["latest"] == second and [n["id"] for n in p["new"]] == [second] and p["new"][0]["title_hi"] == TITLE
+    assert client.get("/api/officer/pulse").status_code == 401

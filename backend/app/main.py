@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 
@@ -24,7 +25,7 @@ from .departments import CATEGORIES, DEPARTMENTS, MAX_TOWN_CHARS
 from .meta_client import transcribe_wav
 from .photos import PhotoError, clean_photo
 from .privacy import contact_hash, mask_pii, normalize_mobile
-from .store import ALL_DEPARTMENTS, REVIEW, Store
+from .store import ALL_DEPARTMENTS, REVIEW, Store, normalize_code
 from .vision import segment_image
 
 MAX_AUDIO_BYTES = 32 * 1024 * 1024
@@ -35,6 +36,7 @@ PHOTO_TYPES = {"image/jpeg", "image/png", "image/webp"}
 FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
 
 app = FastAPI(title="Awaaz", version="0.3.0")
+app.add_middleware(GZipMiddleware, minimum_size=800)  # JSON and scripts shrink to a third on slow phone data
 _store: Store | None = None
 
 
@@ -225,6 +227,7 @@ async def file_complaint(
         (photos_dir() / photo_info["file"]).write_bytes(report.photo)
         store.set_photo(complaint_id, photo_info)
     body = store.get(complaint_id)
+    body["code"] = store.code_of(complaint_id)  # the citizen's private tracking code: shown once, here
     body["errors"] = result.errors
     body["photo_note"] = photo_note
     if body["duplicate_of"]:
@@ -271,11 +274,25 @@ def complaint_photo(complaint_id: int) -> FileResponse:
 
 @app.get("/api/complaints/{complaint_id}/track")
 def track_complaint(complaint_id: int) -> dict:
-    """What a citizen sees: title, department and the plain-Hindi updates. No report text, no photo."""
-    store = get_store()
-    c = store.get(complaint_id)
+    """The public view of one problem by its number: title, department and the plain-Hindi updates.
+    No report text, no photo, and no citizen-only actions (those need the private code)."""
+    c = get_store().get(complaint_id)
     if c is None:
         raise HTTPException(404, "No such complaint.")
+    return {**_track(c), "mine": False}
+
+
+@app.get("/api/track/{code}")
+def track_by_code(code: str) -> dict:
+    """A citizen's own report, by the private code they were given when filing it."""
+    c = get_store().by_code(code)
+    if c is None:
+        raise HTTPException(404, "यह ट्रैकिंग कोड नहीं मिला। कोड दोबारा जाँचें (जैसे AWZ-7K3M-Q2XP)।")
+    return {**_track(c), "mine": True, "code": get_store().code_of(c["id"])}
+
+
+def _track(c: dict) -> dict:
+    store = get_store()
     # A merged report follows the complaint it was merged into.
     main_c = store.get(c["duplicate_of"]) if c["duplicate_of"] else c
     decision = main_c["decision"] or {}
@@ -307,14 +324,17 @@ class MobileBody(BaseModel):
     mobile: str = Field(min_length=10, max_length=20)
 
 
-class DisputeBody(MobileBody):
+class DisputeBody(BaseModel):
+    mobile: str = Field("", max_length=20)
+    code: str = Field("", max_length=20)
     note: str = Field("", max_length=500)
 
 
 @app.post("/api/complaints/{complaint_id}/dispute")
 def dispute(complaint_id: int, body: DisputeBody) -> dict:
     """'It is not fixed': reopens a complaint marked fixed, but only for someone who reported it, proven by
-    the same mobile number (matched by fingerprint), so nobody can reopen other people's complaints."""
+    their private tracking code or the same mobile number (matched by fingerprint), so nobody can reopen
+    other people's complaints."""
     store = get_store()
     c = store.get(complaint_id)
     if c is None:
@@ -323,9 +343,11 @@ def dispute(complaint_id: int, body: DisputeBody) -> dict:
     main_c = store.get(main_id)
     if main_c["status"] != "resolved":
         raise HTTPException(409, "Only a complaint marked fixed can be reopened.")
-    number = normalize_mobile(body.mobile)
-    if number is None or contact_hash(number, settings.contact_salt) not in store.contact_hashes(main_id):
-        raise HTTPException(403, "Use the mobile number given when this problem was reported.")
+    by_code = bool(body.code) and normalize_code(body.code) in store.codes_for(main_id)
+    number = normalize_mobile(body.mobile) if body.mobile else None
+    by_mobile = number is not None and contact_hash(number, settings.contact_salt) in store.contact_hashes(main_id)
+    if not (by_code or by_mobile):
+        raise HTTPException(403, "Use your tracking code, or the mobile number given when this problem was reported.")
     note, _ = mask_pii(body.note.strip())
     message = ("आपने बताया कि समस्या अभी हल नहीं हुई है। शिकायत फिर से खोल दी गई है और विभाग को दोबारा भेजी गई है।"
                + (f" आपकी बात: “{note}”" if note else ""))
@@ -428,15 +450,25 @@ def _focus(officer: dict, dept: str) -> str:
 
 
 @app.get("/api/officer/stats")
-def officer_stats(dept: str = "", officer: dict = Depends(current_officer)) -> dict:
-    return get_store().stats(officer["department"], focus=_focus(officer, dept))
+def officer_stats(days: int = 30, hours: int = 0, dept: str = "", officer: dict = Depends(current_officer)) -> dict:
+    """Status counts for the same window as the insights, so the donut and the tiles always agree."""
+    return get_store().stats(officer["department"], days=max(1, min(days, 365)), focus=_focus(officer, dept),
+                             hours=max(0, min(hours, 48)))
 
 
 @app.get("/api/officer/insights")
-def officer_insights(days: int = 30, dept: str = "", officer: dict = Depends(current_officer)) -> dict:
-    """Trend, rankings and attention lists for the officer's own scope over 1 to 365 days, or for one
-    department in it."""
-    return get_store().insights(officer["department"], days=max(1, min(days, 365)), focus=_focus(officer, dept))
+def officer_insights(days: int = 30, hours: int = 0, dept: str = "", officer: dict = Depends(current_officer)) -> dict:
+    """Trend, rankings and attention lists for the officer's own scope over 1 to 365 days, or the last 1 to 48
+    hours (`hours` wins when given), for the whole scope or one department in it."""
+    return get_store().insights(officer["department"], days=max(1, min(days, 365)), focus=_focus(officer, dept),
+                                hours=max(0, min(hours, 48)))
+
+
+@app.get("/api/officer/pulse")
+def officer_pulse(after: int = 0, officer: dict = Depends(current_officer)) -> dict:
+    """Cheap, polled every few seconds: the newest complaint in the officer's scope, and any filed after `after`,
+    so the dashboard can ring a bell for new work without reloading everything."""
+    return get_store().pulse(officer["department"], after)
 
 
 @app.get("/api/public/stats")

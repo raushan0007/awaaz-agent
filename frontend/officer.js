@@ -1,5 +1,5 @@
 import {
-  $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mapLink, mountChrome, plusCode,
+  $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, hoursText, ICON, mapLink, mountChrome, plusCode,
   animateLists, celebrate, shrinkPhoto, STATUS, takePhoto, TOUCH, WORK_STAGES,
   starsHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
   LOCALE, mountTrend, STATUS_COLOUR, tt,
@@ -8,7 +8,8 @@ import {
 mountChrome("officer");
 $("hero").insertAdjacentHTML("afterbegin", chakraHtml());
 $("hero").insertAdjacentHTML("beforeend", WAVES);
-$("headerExtra").innerHTML = `<div class="who" id="who" hidden></div>`;
+$("headerExtra").innerHTML = `<button type="button" class="bell" id="bell" hidden aria-label="नई शिकायतें">🔔<b id="bellCount" hidden>0</b></button>
+  <div class="who" id="who" hidden></div>`;
 
 const SCOPES = { ...DEPARTMENTS, all: "सभी विभाग (ज़िला)" };
 // What an officer can do next from each state; mirrors TRANSITIONS on the server.
@@ -28,8 +29,7 @@ const SLICES = [
   ["in_progress", "काम चल रहा", STATUS_COLOUR.in_progress],
   ["resolved", "हल हुईं", STATUS_COLOUR.resolved],
   ["needs_review", "जाँच बाकी", "#a9b6ff"],
-  ["rejected", "बंद", "#7c8098"],
-];
+];  // closed-as-invalid reports are counted apart, as everywhere else (KPIs, public dashboard)
 // Any stage of the work can carry a photo of it (the server checks the same).
 const PROOF_STATES = ["inspected", "approved", "in_progress", "resolved"];
 
@@ -50,6 +50,12 @@ try { token = localStorage.getItem("awaaz-officer-token"); } catch { /* private 
 let queue = [];
 let filter = "all";
 let days = 30;
+let hours = 0;  // 1 or 24: the last hour or the last day, counted by the hour
+const win = () => `days=${days}&hours=${hours}`;
+const PULSE_MS = 10000;
+let lastSeen = 0;           // newest complaint id the officer has been told about
+const fresh = new Set();    // complaints that came in while the dashboard was open: marked "new"
+let unread = 0;
 let insight = null;
 let listKey = "most_reported";
 let firstPaint = true;
@@ -105,12 +111,7 @@ async function login(e) {
   }
 }
 
-function age(iso) {
-  const hours = (Date.now() - new Date(iso)) / 36e5;
-  if (hours < 1) return "अभी";
-  if (hours < 24) return `${Math.floor(hours)} घंटे पहले`;
-  return `${Math.floor(hours / 24)} दिन पहले`;
-}
+const age = timeAgo;
 
 function donutHtml(byStatus) {
   const parts = SLICES.map(([k, label, colour]) => [label, colour, byStatus[k] || 0]).filter(([, , v]) => v);
@@ -126,11 +127,12 @@ function donutHtml(byStatus) {
     offset += len;
     return ring;
   }).join("");
+  const closed = byStatus.rejected ? `<p class="hint donut-note">🚫 इसके अलावा ${byStatus.rejected} शिकायतें अमान्य मानकर बंद की गईं</p>` : "";
   return `<svg class="donut" viewBox="0 0 140 140" role="img" aria-label="स्थिति के हिसाब से ${total} शिकायतें">
       ${rings}<text x="70" y="70" text-anchor="middle" font-size="30" font-weight="800">${total}</text>
       <text x="70" y="92" text-anchor="middle" font-size="12" fill="currentColor" opacity=".6">शिकायतें</text></svg>
     <ul class="legend">${parts.map(([label, colour, v]) =>
-      `<li><i style="background:${colour}"></i>${label} <b>${v}</b></li>`).join("")}</ul>`;
+      `<li><i style="background:${colour}"></i>${label} <b>${v}</b></li>`).join("")}</ul>${closed}`;
 }
 
 // --- the analysis: KPIs, daily trend, rankings and attention lists ------------------------------------
@@ -206,7 +208,7 @@ async function setDept(k) {
   dept = k;
   renderDeptChips();
   renderQueue();
-  const [stats, ins] = await Promise.all([api(`/api/officer/stats?${dq()}`), api(`/api/officer/insights?days=${days}&${dq()}`)]);
+  const [stats, ins] = await Promise.all([api(`/api/officer/stats?${win()}&${dq()}`), api(`/api/officer/insights?${win()}&${dq()}`)]);
   $("donut").innerHTML = donutHtml(stats.by_status);
   renderInsights(ins);
 }
@@ -230,10 +232,13 @@ function listHtml(key) {
 
 function renderInsights(ins) {
   insight = ins;
-  $("period").textContent = `(पिछले ${ins.days} दिन${dept ? ` · ${deptName(dept)}` : ""})`;
+  const span = ins.hours ? (ins.hours === 1 ? "पिछला 1 घंटा" : `पिछले ${ins.hours} घंटे`) : `पिछले ${ins.days} दिन`;
+  $("period").textContent = `(${span}${dept ? ` · ${deptName(dept)}` : ""})`;
   renderKpis(ins.kpis);
   $("deptChart").innerHTML = deptChartHtml(ins.departments);
   $("deptChartCard").hidden = ins.departments.length < 2 && !dept;
+  $("trendTitle").textContent = ins.hours === 1 ? "⏱️ पिछले 1 घंटे का हिसाब (हर 5 मिनट)"
+    : ins.hours ? "⏱️ आज का हिसाब, घंटे-घंटे का" : "📈 रोज़ का हिसाब: नई, हल और बाकी";
   mountTrend($("trend"), ins.trend);
   $("deptTable").innerHTML = deptTableHtml(ins.departments);
   $("areaTable").innerHTML = areaTableHtml(ins.areas);
@@ -278,14 +283,16 @@ function actionsHtml(c) {
 function itemHtml(c) {
   const d = c.decision || {};
   const updates = (c.updates || []).map((u) =>
-    `<li><time>${esc(formatTime(u.created_at))}</time> <b>${esc(STATUS[u.status] || u.status)}</b> — <span translate="no">${esc(u.message_hi)}</span>
+    `<li><time>${esc(formatTime(u.created_at))}</time> <small class="gap">(दर्ज होने के ${esc(hoursText((new Date(u.created_at) - new Date(c.created_at)) / 36e5))} बाद)</small>
+      <b>${esc(STATUS[u.status] || u.status)}</b> — <span translate="no">${esc(u.message_hi)}</span>
       ${u.photo ? `<a href="/api/updates/${u.id}/photo" target="_blank" rel="noopener">📷 फ़ोटो</a>` : ""}</li>`).join("");
   const late = c.overdue
     ? `<p class="late">⏰ ${Math.floor(c.idle_days)} दिन से ${OVERDUE_TEXT[c.status] || "कोई कार्रवाई नहीं"} — जल्दी देखें</p>` : "";
   const reopened = (c.updates || []).some((u) => u.status === "reopened");
-  return `<article class="card item ${esc(c.urgency || "")} ${c.overdue ? "is-late" : ""}" data-id="${c.id}">
+  const isNew = fresh.has(c.id) || (c.merged_ids || []).some((i) => fresh.has(i));
+  return `<article class="card item ${esc(c.urgency || "")} ${c.overdue ? "is-late" : ""} ${isNew ? "is-new" : ""}" data-id="${c.id}">
     <div class="item-head">
-      <h3>#${c.id} ${esc(tt(d) || c.text.slice(0, 80))}</h3>
+      <h3>${isNew ? `<span class="new-tag">🆕 नई</span> ` : ""}#${c.id} ${esc(tt(d) || c.text.slice(0, 80))}</h3>
       <span class="status">${esc(age(c.created_at))}</span>
     </div>
     ${late}${reopened ? `<p class="late reopen">↩️ यह शिकायत पहले "हल" की गई थी, फिर से खोली गई है</p>` : ""}
@@ -293,6 +300,7 @@ function itemHtml(c) {
       ${c.urgency ? `<span class="badge ${esc(c.urgency)}">${esc(URGENCY[c.urgency])}</span>` : ""}
       <span class="badge ${esc(c.status)}">${esc(STATUS[c.status] || c.status)}</span>
       ${c.supporters > 1 ? `<span class="badge merged">👥 ${c.supporters} लोगों ने बताया</span>` : ""}
+      ${(c.merged_ids || []).length ? `<span class="badge merged" title="इस शिकायत में जुड़ी रिपोर्ट">🔗 जुड़ी: ${c.merged_ids.map((i) => `#${i}`).join(", ")}</span>` : ""}
       <span class="badge">📍 ${esc(c.area || "जगह नहीं बताई")}</span>
       ${c.location ? `<a class="badge resolved" href="${mapLink(c.location)}" target="_blank" rel="noopener"
         title="नागरिक के फ़ोन की सटीक जगह">🗺️ नक्शे पर · ${esc(plusCode(c.location.lat, c.location.lon))}${c.location.accuracy != null ? ` · ±${c.location.accuracy} मी.` : ""}</a>` : ""}
@@ -335,7 +343,9 @@ function matches(c) {
   const q = $("search").value.trim().toLowerCase().replace(/^#/, "");
   if (!q) return true;
   const d = c.decision || {};
-  return String(c.id) === q || `${c.text} ${c.area} ${d.title_hi || ""} ${d.title_en || ""}`.toLowerCase().includes(q);
+  // a report merged into this complaint is found by its own number too
+  return String(c.id) === q || (c.merged_ids || []).map(String).includes(q)
+    || `${c.text} ${c.area} ${d.title_hi || ""} ${d.title_en || ""}`.toLowerCase().includes(q);
 }
 
 function renderQueue() {
@@ -366,7 +376,7 @@ async function refresh() {
   if (document.activeElement && document.activeElement.closest(".actions")) return;
   if ([...document.querySelectorAll(".actions")].some((b) => b._proof)) return;
   const [stats, items, ins, pub, done] = await Promise.all([
-    api(`/api/officer/stats?${dq()}`), api("/api/officer/queue"), api(`/api/officer/insights?days=${days}&${dq()}`),
+    api(`/api/officer/stats?${win()}&${dq()}`), api("/api/officer/queue"), api(`/api/officer/insights?${win()}&${dq()}`),
     fetch("/api/public/stats").then((r) => r.json()), api("/api/officer/queue?closed=1"),
   ]);
   closedQueue = done;
@@ -429,8 +439,54 @@ async function uploadProof(updateId, file) {
   }
 }
 
+// --- the bell: new complaints arrive while the dashboard is open ---------------------------------------
+
+function ring() {
+  try {  // a short two-note chime; browsers allow it once the officer has clicked anything on the page
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    [880, 1320].forEach((f, i) => {
+      const o = ctx.createOscillator(), g = ctx.createGain();
+      o.frequency.value = f; o.connect(g); g.connect(ctx.destination);
+      const t = ctx.currentTime + i * 0.18;
+      g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.3);
+      o.start(t); o.stop(t + 0.32);
+    });
+  } catch { /* no sound: the toast and the badge still show */ }
+}
+
+function setUnread(n) {
+  unread = n;
+  $("bellCount").textContent = n;
+  $("bellCount").hidden = !n;
+  $("bell").classList.toggle("ringing", n > 0);
+  document.title = (n ? `(${n}) ` : "") + document.title.replace(/^\(\d+\) /, "");
+}
+
+async function pulse() {
+  const p = await api(`/api/officer/pulse?after=${lastSeen}`);
+  if (!lastSeen) { lastSeen = p.latest; return; }  // the first look only learns where "new" starts
+  if (!p.new.length) return;
+  lastSeen = Math.max(lastSeen, ...p.new.map((n) => n.id));
+  for (const n of p.new.slice().reverse()) {
+    fresh.add(n.id);
+    const where = `${ICON[n.category] || "🔎"} ${deptName(n.category || "review")}${n.area ? ` · ${n.area}` : ""}`;
+    const what = n.duplicate_of ? `#${n.id} नई रिपोर्ट, शिकायत #${n.duplicate_of} से जुड़ी` : `नई शिकायत #${n.id}: ${tt(n)}`;
+    toast(`🔔 ${what} — ${where}`, n.urgency === "critical" ? "bad" : "ok");
+    try {
+      if (document.hidden && "Notification" in window && Notification.permission === "granted") {
+        new Notification(`Awaaz: ${what}`, { body: where, tag: `awaaz-${n.id}` });
+      }
+    } catch { /* notifications are a bonus */ }
+  }
+  ring();
+  setUnread(unread + p.new.length);
+  await refresh();
+}
+
 async function start(officer) {
   me = officer;
+  $("bell").hidden = false;
   $("loginCard").hidden = true;
   $("dash").hidden = false;
   const scope = SCOPES[officer.department] || officer.department;
@@ -438,6 +494,7 @@ async function start(officer) {
   $("who").innerHTML = `<b>${esc(officer.name)}</b><button class="link" type="button" id="logout">लॉग आउट</button>`;
   $("logout").addEventListener("click", logout);
   $("deptName").textContent = scope;
+  pulse().catch(() => {});
   $("greeting").textContent = `नमस्ते, ${officer.name}`;
   await refresh();
 }
@@ -481,9 +538,13 @@ $("presets").addEventListener("click", async (e) => {
   const chip = e.target.closest(".chip");
   if (!chip) return;
   if (chip.id === "print") { window.print(); return; }
-  days = Number(chip.dataset.days);
-  document.querySelectorAll("#presets .chip[data-days]").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
-  renderInsights(await api(`/api/officer/insights?days=${days}&${dq()}`));
+  hours = Number(chip.dataset.hours || 0);
+  if (!hours) days = Number(chip.dataset.days);
+  document.querySelectorAll("#presets .chip[data-days], #presets .chip[data-hours]")
+    .forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
+  const [stats, ins] = await Promise.all([api(`/api/officer/stats?${win()}&${dq()}`), api(`/api/officer/insights?${win()}&${dq()}`)]);
+  $("donut").innerHTML = donutHtml(stats.by_status);
+  renderInsights(ins);
 });
 $("ltabs").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
@@ -512,6 +573,14 @@ $("queue").addEventListener("click", async (e) => {
   if (blob) setProof(box, blob, "कैमरा की फ़ोटो");
 });
 setInterval(() => { if (token && !$("dash").hidden) refresh().catch(() => {}); }, REFRESH_MS);
+setInterval(() => { if (token && !$("dash").hidden) pulse().catch(() => {}); }, PULSE_MS);
+$("bell").addEventListener("click", () => {
+  setUnread(0);
+  setFilter("all");
+  $("queueSection").scrollIntoView({ behavior: "smooth", block: "start" });
+  // the first click is also the moment to ask for desktop notifications, for when this tab is in the background
+  try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch { /* ignore */ }
+});
 
 if (token) {
   api("/api/officer/me").then(start).catch(logout);
