@@ -274,7 +274,8 @@ def test_public_dashboard_shows_emergencies_backers_trend_and_before_after(clien
     assert [e["id"] for e in s["emergency"]] == [danger] and s["emergency"][0]["supporters"] == 3
     assert [m["id"] for m in s["most_reported"]] == [danger]
     assert s["by_category"]["roads"]["reports"] == 4 and s["by_category"]["roads"]["total"] == 2
-    assert len(s["trend"]) == 14 and s["trend"][-1] == {"day": s["trend"][-1]["day"], "filed": 4, "fixed": 1}
+    assert len(s["trend"]) == 14 and s["trend"][-1] == {"day": s["trend"][-1]["day"], "filed": 4, "fixed": 1,
+                                                       "open": 1, "in_progress": 0, "resolved": 1}
     solved = s["solved"][0]
     assert solved["id"] == fixed and solved["has_photo"] and solved["proof_update"] == uid and solved["fix_days"] == 0.0
 
@@ -358,3 +359,34 @@ def test_work_moves_forward_stage_by_stage_and_the_citizen_sees_each(client, sto
     assert (store.get(cid)["status"], store.get(cid)["stage"]) == ("resolved", "resolved")
     assert step("reopened", "phir se gaddha").status_code == 200
     assert (store.get(cid)["status"], store.get(cid)["stage"]) == ("open", None)
+
+
+def test_daily_trend_tracks_each_day_end_state():
+    from backend.app.store import _day_trend
+    days = ["2026-10-01", "2026-10-02", "2026-10-03", "2026-10-04"]
+    reports = [{"created_at": "2026-10-01T05:00:00+00:00"}, {"created_at": "2026-10-01T06:00:00+00:00"},
+               {"created_at": "2026-10-02T05:00:00+00:00"}, {"created_at": "2026-10-03T05:00:00+00:00"}]
+    problems = [{"id": 1, "created_at": "2026-10-01T05:00:00+00:00"}, {"id": 2, "created_at": "2026-10-02T05:00:00+00:00"},
+                {"id": 3, "created_at": "2026-10-03T05:00:00+00:00"}]
+    history = {1: [("2026-10-01T09:00:00+00:00", "inspected"), ("2026-10-02T09:00:00+00:00", "resolved"),
+                   ("2026-10-03T09:00:00+00:00", "reopened")],
+               2: [("2026-10-03T09:00:00+00:00", "resolved")],
+               3: [("2026-10-04T09:00:00+00:00", "rejected")]}
+    t = {d["day"]: d for d in _day_trend(days, reports, problems, history)}
+    assert [t[d]["filed"] for d in days] == [2, 1, 1, 0]
+    assert [t[d]["fixed"] for d in days] == [0, 1, 1, 0]
+    # day 1: #1 work on; day 2: #1 fixed, #2 open; day 3: #1 reopened, #2 fixed, #3 open; day 4: #3 rejected drops out
+    assert [(t[d]["open"], t[d]["in_progress"], t[d]["resolved"]) for d in days] == [(0, 1, 0), (1, 0, 1), (2, 0, 1), (1, 0, 1)]
+
+
+def test_dashboards_trend_ends_where_the_status_counts_are(client, store, open_model):
+    a, b = add(store), add(store, area="Ward 6")
+    add(store, duplicate_of=a)
+    h = headers(client, "district.officer", "district-pass")
+    assert client.post(f"/api/officer/complaints/{b}/status", json={"status": "resolved", "note": "theek"}, headers=h).status_code == 200
+    pub = client.get("/api/public/stats").json()
+    end = pub["trend"][-1]
+    assert end["filed"] == 3 and end["fixed"] == 1
+    assert {k: end[k] for k in ("open", "in_progress", "resolved")} == {"open": 1, "in_progress": 0, "resolved": 1}
+    ins = client.get("/api/officer/insights?days=7", headers=h).json()
+    assert {k: ins["trend"][-1][k] for k in ("open", "in_progress", "resolved")} == {"open": 1, "in_progress": 0, "resolved": 1}

@@ -894,3 +894,34 @@ main > *:nth-child(n+6) { animation-delay: .3s; }
 /* vanilla-tilt glare stays inside rounded cards */
 .dept-card, a.feed-card, .ba, .step, .kpi, a.em-card, .open-box > div { transform-style: preserve-3d; }
 .js-tilt-glare { border-radius: inherit; }
+
+/* the day-by-day chart: new/fixed bars on top, the end-of-day state stacked below, a tooltip per day */
+.trend-chart { position: relative; }
+.trend-chart svg { width: 100%; height: auto; display: block; touch-action: pan-y; outline: none; }
+.trend-chart svg:focus-visible { outline: 2px solid #ff9a2e; outline-offset: 4px; border-radius: 8px; }
+.trend .lg { flex-wrap: wrap; row-gap: 4px; }
+.trend .lg b { color: var(--text); margin-left: 2px; }
+.trend .lg2 { margin: 6px 0 0; }
+.trend-chart text.panel { fill: var(--text-2); font-size: 12px; font-weight: 600; }
+.trend-chart .tbar { transform-box: fill-box; transform-origin: 50% 100%; animation: grow-up .7s cubic-bezier(.2, .8, .2, 1) both; }
+.trend-chart .hit { fill: transparent; cursor: crosshair; }
+.trend-chart .hit:hover, .trend-chart .hit.on { fill: rgba(255, 255, 255, .06); }
+.trend-chart .guide { stroke: rgba(255, 255, 255, .35); stroke-dasharray: 3 3; pointer-events: none; }
+.trend-chart .guide[hidden] { display: none; }
+@keyframes grow-up { from { transform: scaleY(0); } }
+.chart-tip { position: absolute; z-index: 5; min-width: 190px; pointer-events: none; padding: 10px 12px; border-radius: 12px;
+  background: rgba(8, 14, 48, .96); border: 1px solid rgba(255, 255, 255, .14); box-shadow: 0 12px 30px rgba(0, 0, 0, .45);
+  font-size: 13px; line-height: 1.35; }
+.chart-tip.below { position: static; margin-top: 10px; display: grid; grid-template-columns: 1fr 1fr; column-gap: 14px; box-shadow: none; }
+.chart-tip.below .tip-day { grid-column: 1 / -1; }
+.chart-tip.below small { grid-row: 2; }
+.chart-tip.below ul { grid-row: 3; }
+.chart-tip[hidden] { display: none; }
+.chart-tip .tip-day { display: block; font-size: 14px; margin-bottom: 4px; }
+.chart-tip small { display: block; color: var(--muted); margin-top: 4px; font-size: 11px; letter-spacing: .3px; }
+.chart-tip ul { list-style: none; margin: 2px 0 0; padding: 0; display: grid; gap: 2px; }
+.chart-tip li { display: flex; align-items: center; gap: 7px; }
+.chart-tip li i { width: 9px; height: 9px; border-radius: 3px; flex: none; }
+.chart-tip li b { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
+@media (prefers-reduced-motion: reduce) { .trend-chart .tbar { animation: none; } }
+@media print { .chart-tip, .trend .hint { display: none; } }

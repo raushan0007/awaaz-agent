@@ -417,26 +417,108 @@ export function donutSvg(byStatus) {
     <ul class="legend">${parts.map(([label, colour, v]) => `<li><i style="background:${colour}"></i>${label} <b>${v}</b></li>`).join("")}</ul>`;
 }
 
-/** Filed (saffron) and fixed (green) per day: two lines that draw themselves over shaded areas. */
-export function trendSvg(series) {
-  const W = 640, H = 200, L = 28, B = 22, T = 10;
-  const max = Math.max(2, ...series.map((d) => Math.max(d.filed, d.fixed)));
-  const x = (i) => L + (i * (W - L - 8)) / Math.max(1, series.length - 1);
-  const y = (v) => H - B - (v * (H - B - T)) / max;
-  const line = (k) => series.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(d[k]).toFixed(1)}`).join(" ");
-  const area = (k) => `${line(k)} L${x(series.length - 1).toFixed(1)} ${H - B} L${L} ${H - B}Z`;
-  const every = Math.ceil(series.length / 5);
-  const labels = series.map((d, i) => (i % every === 0 || i === series.length - 1)
-    ? `<text x="${x(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${new Date(d.day).toLocaleDateString(LOCALE, { day: "numeric", month: "short" })}</text>` : "").join("");
-  const dots = series.map((d, i) => d.filed ? `<circle cx="${x(i).toFixed(1)}" cy="${y(d.filed).toFixed(1)}" r="3" fill="#ff9a2e"/>` : "").join("");
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
-    <defs><linearGradient id="hr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9a2e" stop-opacity=".35"/><stop offset="1" stop-color="#ff9a2e" stop-opacity="0"/></linearGradient>
-    <linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#46dc5f" stop-opacity=".3"/><stop offset="1" stop-color="#46dc5f" stop-opacity="0"/></linearGradient></defs>
-    <g class="grid">${[0, Math.ceil(max / 2), max].map((t) => `<line x1="${L}" x2="${W}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`).join("")}</g>
-    <path d="${area("filed")}" fill="url(#hr)"/><path d="${area("fixed")}" fill="url(#hg)"/>
-    <path class="rcv draw" d="${line("filed")}" fill="none" stroke-width="2.5" stroke-linejoin="round"/>
-    <path class="rsv draw" d="${line("fixed")}" fill="none" stroke-width="2.5" stroke-linejoin="round"/>
-    ${dots}${labels}</svg>`;
+const TREND = { filed: "#ff9a2e", fixed: "#46dc5f", open: "#ffcf5c", in_progress: "#6aa8ff", resolved: "#2fae4f" };
+
+/** One day's numbers as the tooltip lists them. */
+function trendTip(d) {
+  const date = new Date(d.day + "T12:00:00").toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "long" });
+  const row = (colour, label, v) => `<li><i style="background:${colour}"></i><span>${tr(label)}</span><b>${v}</b></li>`;
+  return `<b class="tip-day">${esc(date)}</b>
+    <small>${tr("उस दिन")}</small><ul>${row(TREND.filed, "नई रिपोर्ट", d.filed)}${row(TREND.fixed, "हल हुईं", d.fixed)}</ul>
+    <small>${tr("दिन ख़त्म होने पर")}</small><ul>${row(TREND.open, "खुली", d.open)}${row(TREND.in_progress, "काम चालू", d.in_progress)}${row(TREND.resolved, "हल", d.resolved)}</ul>`;
+}
+
+/** Two panels over the same days. Top: reports that came in and problems fixed that day, side by side so
+ *  neither hides the other. Bottom: where every problem stood when the day ended (open, work on, fixed),
+ *  stacked. Hover, tap or arrow-key any day for its exact numbers. Redraws itself when the card resizes. */
+export function mountTrend(el, series) {
+  if (!series?.length) { el.innerHTML = `<p class="status">${tr("अभी कोई आँकड़ा नहीं।")}</p>`; return; }
+  const n = series.length;
+  const W = Math.round(Math.min(900, Math.max(300, el.clientWidth || 640)));
+  const narrow = W < 520;
+  const L = 28, R = 6, gap = 38, ph = narrow ? 92 : 104, T = 30, H = T + ph + gap + ph + 22;
+  const slot = (W - L - R) / n;
+  const cx = (i) => L + slot * (i + 0.5);
+  const scale = (top) => { const step = Math.max(1, Math.ceil(top / 3)); return { step, max: step * Math.max(1, Math.ceil(top / step)) }; };
+  const a = scale(Math.max(1, ...series.map((d) => Math.max(d.filed, d.fixed))));
+  const b = scale(Math.max(1, ...series.map((d) => d.open + d.in_progress + d.resolved)));
+  const top1 = T, base1 = T + ph, top2 = base1 + gap, base2 = top2 + ph;
+  const y1 = (v) => base1 - (v * ph) / a.max, y2 = (v) => base2 - (v * ph) / b.max;
+  const bw = Math.max(2, Math.min(16, slot * 0.36)), sw = Math.max(3, Math.min(26, slot * 0.62));
+  const grid = (s, y) => Array.from({ length: s.max / s.step + 1 }, (_, k) => k * s.step).map((t) =>
+    `<line x1="${L}" x2="${W - R}" y1="${y(t).toFixed(1)}" y2="${y(t).toFixed(1)}"/><text x="${L - 6}" y="${(y(t) + 4).toFixed(1)}" text-anchor="end">${t}</text>`).join("");
+  const delay = (i) => `style="animation-delay:${(i * 0.025).toFixed(3)}s"`;
+  const rect = (fill, x, y, w, h, i, round = "") =>
+    `<rect class="tbar" fill="${fill}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}"${round} ${delay(i)}/>`;
+  const bars = series.map((d, i) =>
+    (d.filed ? rect(TREND.filed, cx(i) - bw - 1, y1(d.filed), bw, base1 - y1(d.filed), i, ' rx="2"') : "") +
+    (d.fixed ? rect(TREND.fixed, cx(i) + 1, y1(d.fixed), bw, base1 - y1(d.fixed), i, ' rx="2"') : "")).join("");
+  const stacks = series.map((d, i) => {
+    let acc = 0;
+    return ["resolved", "in_progress", "open"].map((k) => {
+      if (!d[k]) return "";
+      const y = y2(acc + d[k]), h = y2(acc) - y - 1;
+      acc += d[k];
+      return rect(TREND[k], cx(i) - sw / 2, y, sw, h, i);
+    }).join("");
+  }).join("");
+  const every = Math.ceil(n / (narrow ? 4 : 7));
+  const fmt = (d) => new Date(d.day + "T12:00:00").toLocaleDateString(LOCALE, { day: "numeric", month: "short" });
+  const labels = series.map((d, i) => (i === n - 1 || (i % every === 0 && n - 1 - i >= every * 0.6))
+    ? `<text x="${cx(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${fmt(d)}</text>` : "").join("");
+  const total = series.reduce((s, d) => [s[0] + d.filed, s[1] + d.fixed], [0, 0]);
+  const key = (k, label, extra = "") => `<span><i style="background:${TREND[k]}"></i>${label}${extra}</span>`;
+  el.classList.add("trend-chart");
+  el.innerHTML = `<div class="lg">${key("filed", "नई रिपोर्ट", ` <b>${total[0]}</b>`)}${key("fixed", "हल हुईं", ` <b>${total[1]}</b>`)}</div>
+    <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
+    <g class="grid">${grid(a, y1)}${grid(b, y2)}</g>
+    <text class="panel" x="${L}" y="${top1 - 14}">हर दिन आईं और हल हुईं</text>
+    <text class="panel" x="${L}" y="${top2 - 14}">दिन ख़त्म होने पर कुल स्थिति</text>
+    <line class="guide" x1="0" x2="0" y1="${top1}" y2="${base2}" hidden/>
+    ${bars}${stacks}${labels}
+    ${series.map((d, i) => `<rect class="hit" data-i="${i}" x="${(L + slot * i).toFixed(1)}" y="${top1 - 4}" width="${slot.toFixed(1)}" height="${base2 - top1 + 8}"/>`).join("")}
+    </svg>
+    <div class="lg lg2">${key("open", "खुली")}${key("in_progress", "काम चालू")}${key("resolved", "हल")}</div>
+    <div class="chart-tip${narrow ? " below" : ""}" role="status" hidden></div>`;
+  const svg = el.querySelector("svg"), tip = el.querySelector(".chart-tip"), guide = el.querySelector(".guide");
+  let shown = -1;
+  const show = (i) => {
+    if (i === shown) return;
+    shown = i;
+    guide.hidden = false;
+    guide.setAttribute("x1", cx(i)); guide.setAttribute("x2", cx(i));
+    svg.querySelectorAll(".hit.on").forEach((c) => c.classList.remove("on"));
+    svg.querySelector(`.hit[data-i="${i}"]`).classList.add("on");
+    tip.innerHTML = trendTip(series[i]);
+    tip.hidden = false;
+    if (narrow) return;  // on phones the numbers sit under the chart instead of over it
+    const box = el.getBoundingClientRect(), s = svg.getBoundingClientRect();
+    const px = s.left - box.left + (cx(i) / W) * s.width;
+    tip.style.left = `${Math.min(Math.max(4, px + (px > box.width / 2 ? -tip.offsetWidth - 14 : 14)), box.width - tip.offsetWidth - 4)}px`;
+    tip.style.top = `${s.top - box.top + 4}px`;
+  };
+  const hide = () => {
+    if (narrow) { show(n - 1); return; }
+    shown = -1; guide.hidden = true; tip.hidden = true;
+    svg.querySelectorAll(".hit.on").forEach((c) => c.classList.remove("on"));
+  };
+  svg.addEventListener("pointermove", (e) => { const h = e.target.closest(".hit"); if (h) show(+h.dataset.i); });
+  svg.addEventListener("pointerdown", (e) => { const h = e.target.closest(".hit"); if (h) show(+h.dataset.i); });
+  svg.addEventListener("pointerleave", (e) => { if (e.pointerType === "mouse") hide(); });
+  svg.tabIndex = 0;
+  svg.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    show(Math.min(n - 1, Math.max(0, (shown < 0 ? n : shown) + (e.key === "ArrowRight" ? 1 : -1))));
+  });
+  svg.addEventListener("blur", hide);
+  if (narrow) show(n - 1);  // phones start with today's numbers showing
+  // redraw for the new width when the card is resized (rotating a phone, a wider window)
+  el._trendResize?.disconnect();
+  el._trendResize = new ResizeObserver(() => {
+    if (el.isConnected && Math.abs((el.clientWidth || W) - W) > 40) { el._trendResize.disconnect(); mountTrend(el, series); }
+  });
+  el._trendResize.observe(el);
 }
 
 // --- how complete a report is, and the citizen's own tickets on this phone ---------------------------

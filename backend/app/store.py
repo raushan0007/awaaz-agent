@@ -113,6 +113,33 @@ def _areas_match(a: str, b: str) -> bool:
     return a in b or b in a
 
 
+# What an update's status means for the problem's state on that day: the work stages all count as work on.
+_DAY_STATE = {"resolved": "resolved", "rejected": "rejected", "reopened": "open", "open": "open"}
+
+
+def _day_trend(days: list[str], reports: list[dict], problems: list[dict], history: dict[int, list]) -> list[dict]:
+    """Per IST day: reports that came in, problems fixed that day, and where every problem filed so far stood
+    when the day ended (open, work on, fixed). `history` maps a problem id to its (time, status) updates in order."""
+    day_of = lambda iso: datetime.fromisoformat(iso).astimezone(IST).date().isoformat()  # noqa: E731
+    out = {d: {"filed": 0, "fixed": 0, "open": 0, "in_progress": 0, "resolved": 0} for d in days}
+    for r in reports:
+        if day_of(r["created_at"]) in out:
+            out[day_of(r["created_at"])]["filed"] += 1
+    for p in problems:
+        born = day_of(p["created_at"])
+        steps = [(day_of(at), _DAY_STATE.get(st, "in_progress")) for at, st in history.get(p["id"], [])]
+        fixed_days = {d for d, st in steps if st == "resolved"}
+        state, k = "open", 0
+        for d in days:
+            while k < len(steps) and steps[k][0] <= d:
+                state = steps[k][1]; k += 1
+            if d in fixed_days:
+                out[d]["fixed"] += 1
+            if born <= d and state != "rejected":
+                out[d][state] += 1
+    return [{"day": d, **v} for d, v in out.items()]
+
+
 class Store:
     def __init__(self, path: Path | str):
         self._lock = threading.Lock()
@@ -345,6 +372,18 @@ class Store:
             "top_areas": [{"area": a, "reports": n, "open": o or 0, "urgent": u or 0} for a, n, o, u in areas],
         }
 
+    def _history(self, ids: list[int]) -> dict[int, list]:
+        """Each complaint's (time, status) updates, oldest first."""
+        out: dict[int, list] = {}
+        for i in range(0, len(ids), 500):
+            part = ids[i:i + 500]
+            for cid, at, status in self._db.execute(
+                f"SELECT complaint_id, created_at, status FROM updates WHERE complaint_id IN ({','.join('?' * len(part))})"
+                " ORDER BY created_at, id", part
+            ).fetchall():
+                out.setdefault(cid, []).append((at, status))
+        return out
+
     def insights(self, department: str, days: int = 30) -> dict[str, Any]:
         """The officer's analysis for the last `days` days: KPIs, a daily trend, department and area
         rankings, and the lists that need attention (most reported, unheard, slowest/fastest fixes)."""
@@ -393,17 +432,8 @@ class Store:
                 "unheard": sum(g["status"] == "open" and g["response_hours"] is None for g in group),
             }
 
-        trend = {}
-        for i in range(days - 1, -1, -1):
-            trend[(now - timedelta(days=i)).astimezone(IST).date().isoformat()] = {"filed": 0, "fixed": 0}
-        for r in rows:
-            day = datetime.fromisoformat(r["created_at"]).astimezone(IST).date().isoformat()
-            if day in trend:
-                trend[day]["filed"] += 1
-        for at in fixed_at.values():
-            day = datetime.fromisoformat(at).astimezone(IST).date().isoformat()
-            if day in trend:
-                trend[day]["fixed"] += 1
+        trend = _day_trend([(now - timedelta(days=i)).astimezone(IST).date().isoformat() for i in range(days - 1, -1, -1)],
+                           rows, problems, self._history([p["id"] for p in problems]))
 
         by_dept: dict[str, list] = {}
         by_area: dict[str, list] = {}
@@ -428,8 +458,7 @@ class Store:
             "recent": problems[::-1][:8],
             "times": sorted((p for p in problems if p["fix_days"] is not None), key=lambda p: p["fix_days"]),
         }
-        return {"days": days, "kpis": {**summary(problems), "reports": len(rows)}, "trend": [
-            {"day": d, **v} for d, v in trend.items()], "departments": departments, "areas": areas, "lists": lists}
+        return {"days": days, "kpis": {**summary(problems), "reports": len(rows)}, "trend": trend, "departments": departments, "areas": areas, "lists": lists}
 
     def places(self) -> list[dict[str, Any]]:
         """Towns with at least one report, busiest first, shown as first spelled."""
@@ -510,16 +539,9 @@ class Store:
             # Public accountability: how long a department takes to answer at all.
             c["avg_reply_hours"] = round(sum(replies) / len(replies), 1) if replies else None
 
-        trend = {(today - timedelta(days=i)).isoformat(): {"filed": 0, "fixed": 0} for i in range(13, -1, -1)}
-        for r in rows:
-            day = datetime.fromisoformat(r["created_at"]).astimezone(IST).date().isoformat()
-            if day in trend:
-                trend[day]["filed"] += 1
         ids = {r["id"] for r in problems}
-        for cid, at in fixed_at.items():
-            day = datetime.fromisoformat(at).astimezone(IST).date().isoformat()
-            if cid in ids and day in trend:
-                trend[day]["fixed"] += 1
+        trend = _day_trend([(today - timedelta(days=i)).isoformat() for i in range(13, -1, -1)],
+                           rows, problems, self._history(list(ids)))
 
         open_now = [r for r in problems if r["status"] in OPEN_STATES]
         solved = sorted((r for r in problems if r["status"] == "resolved" and r["id"] in fixed_at),
@@ -533,7 +555,7 @@ class Store:
             "today": {"filed": sum(is_today(r["created_at"]) for r in rows),
                       "fixed": sum(is_today(fixed_at[i]) for i in ids if i in fixed_at)},
             "by_category": by_category,
-            "trend": [{"day": d, **v} for d, v in trend.items()],
+            "trend": trend,
             # danger to life or health, still open: shown first and loud
             "emergency": [card(r) for r in sorted((r for r in open_now if r["urgency"] == "critical"),
                                                   key=lambda r: -(backers.get(r["id"], 0)))][:6],

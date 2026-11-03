@@ -2,7 +2,7 @@ import { Recorder } from "./recorder.js";
 import {
   $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
   mountChrome, revealOnScroll,
-  animateLists, celebrate, springIn, donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  animateLists, celebrate, springIn, donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, mountTrend, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
   LOCALE, tt,
 } from "./shared.js";
 
@@ -380,7 +380,7 @@ async function loadPublic() {
 
   if (fresh) {
     $("homeDonut").innerHTML = donutSvg(s.by_status);
-    $("homeTrend").innerHTML = trendSvg(s.trend);
+    mountTrend($("homeTrend"), s.trend);
     $("catBars").innerHTML = catBarsHtml(s.by_category);
     requestAnimationFrame(() => setTimeout(() =>
       document.querySelectorAll("#catBars .bars i").forEach((b) => { b.style.width = b.dataset.w + "%"; }), 150));

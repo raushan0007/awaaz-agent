@@ -2,7 +2,7 @@ import {
   $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mapLink, mountChrome, plusCode,
   animateLists, celebrate, shrinkPhoto, STATUS, takePhoto, TOUCH, WORK_STAGES,
   starsHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
-  LOCALE, tt,
+  LOCALE, mountTrend, tt,
 } from "./shared.js";
 
 mountChrome("officer");
@@ -149,28 +149,6 @@ function renderKpis(k) {
   [...$("kpis").querySelectorAll("b")].forEach((b, i) => countUp(b, tiles[i][2]));
 }
 
-// Filed (saffron) and fixed (green) per day as two drawn lines over a light grid.
-function trendHtml(series) {
-  const W = 640, H = 220, L = 30, B = 24, T = 10;
-  const max = Math.max(2, ...series.map((d) => Math.max(d.filed, d.fixed)));
-  const x = (i) => L + (i * (W - L - 8)) / Math.max(1, series.length - 1);
-  const y = (v) => H - B - (v * (H - B - T)) / max;
-  const line = (key) => series.map((d, i) => `${i ? "L" : "M"}${x(i).toFixed(1)} ${y(d[key]).toFixed(1)}`).join(" ");
-  const area = (key) => `${line(key)} L${x(series.length - 1).toFixed(1)} ${H - B} L${L} ${H - B}Z`;
-  const ticks = [0, Math.ceil(max / 2), max];
-  const every = Math.ceil(series.length / 6);
-  const labels = series.map((d, i) => (i % every === 0 || i === series.length - 1)
-    ? `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${new Date(d.day).toLocaleDateString(LOCALE, { day: "numeric", month: "short" })}</text>` : "").join("");
-  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
-    <defs><linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9a2e" stop-opacity=".35"/><stop offset="1" stop-color="#ff9a2e" stop-opacity="0"/></linearGradient>
-    <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#46dc5f" stop-opacity=".3"/><stop offset="1" stop-color="#46dc5f" stop-opacity="0"/></linearGradient></defs>
-    <g class="grid">${ticks.map((t) => `<line x1="${L}" x2="${W}" y1="${y(t)}" y2="${y(t)}"/><text x="${L - 6}" y="${y(t) + 4}" text-anchor="end">${t}</text>`).join("")}</g>
-    <path d="${area("filed")}" fill="url(#gr)"/><path d="${area("fixed")}" fill="url(#gg)"/>
-    <path class="rcv draw" d="${line("filed")}" fill="none" stroke-width="2.5" stroke-linejoin="round"/>
-    <path class="rsv draw" d="${line("fixed")}" fill="none" stroke-width="2.5" stroke-linejoin="round"/>
-    ${labels}</svg>`;
-}
-
 function deptTableHtml(rows) {
   if (!rows.length) return `<p class="status">इस अवधि में कोई शिकायत नहीं।</p>`;
   return `<table class="tbl"><thead><tr><th>विभाग</th><th>समस्याएँ</th><th>रिपोर्ट</th><th>खुली</th><th>हल</th><th>हल दर</th>
@@ -203,7 +181,7 @@ function renderInsights(ins) {
   insight = ins;
   $("period").textContent = `(पिछले ${ins.days} दिन)`;
   renderKpis(ins.kpis);
-  $("trend").innerHTML = trendHtml(ins.trend);
+  mountTrend($("trend"), ins.trend);
   $("deptTable").innerHTML = deptTableHtml(ins.departments);
   $("areaTable").innerHTML = areaTableHtml(ins.areas);
   $("list").innerHTML = listHtml(listKey);
