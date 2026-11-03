@@ -1,6 +1,6 @@
 import {
   $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mapLink, mountChrome, plusCode,
-  shrinkPhoto, STATUS,
+  shrinkPhoto, STATUS, takePhoto, TOUCH,
   starsHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
@@ -213,7 +213,9 @@ function actionsHtml(c) {
     <label>नोट (नागरिक को सरल हिंदी में बताया जाएगा)</label>
     <textarea data-role="note" rows="2" maxlength="500" placeholder="जैसे: JE ne site dekh li, kal se kaam shuru"></textarea>
     ${actions.some(([s]) => PROOF_STATES.includes(s)) ? `<div class="proof-pick">
-      <label class="pick-btn">📷 काम की फ़ोटो जोड़ें<input type="file" accept="image/*" data-role="proof" hidden></label>
+      <button type="button" class="pick-btn" data-role="cam">📷 कैमरा</button>
+      <input type="file" accept="image/*" capture="environment" data-role="proofcam" hidden>
+      <label class="pick-btn alt">🖼️ गैलरी<input type="file" accept="image/*" data-role="proof" hidden></label>
       <span class="hint" data-role="proofName">ज़रूरी नहीं — नागरिक को काम होता दिखेगा</span></div>` : ""}
     <div class="action-buttons">${actions.map(([status, label]) =>
       `<button type="button" class="act ${status}" data-status="${status}">${label}</button>`).join("")}</div>
@@ -273,7 +275,7 @@ function renderQueue() {
 async function refresh() {
   // Never re-render under an officer who is typing a note.
   if (document.activeElement && document.activeElement.closest(".actions")) return;
-  if ([...document.querySelectorAll('[data-role="proof"]')].some((f) => f.files.length)) return;
+  if ([...document.querySelectorAll(".actions")].some((b) => b._proof)) return;
   const [stats, items, ins, pub] = await Promise.all([
     api("/api/officer/stats"), api("/api/officer/queue"), api(`/api/officer/insights?days=${days}`),
     fetch("/api/public/stats").then((r) => r.json()),
@@ -302,7 +304,7 @@ async function act(button) {
       body: JSON.stringify({ status: button.dataset.status, note, category }),
     });
     msg.textContent = `✓ नागरिक को भेजा: "${r.message_hi}"`;
-    const file = box.querySelector('[data-role="proof"]')?.files[0];
+    const file = box._proof || box.querySelector('[data-role="proof"]')?.files[0];
     if (file && PROOF_STATES.includes(button.dataset.status)) {
       msg.textContent += " · फ़ोटो जोड़ी जा रही है…";
       await uploadProof(r.update_id, file);
@@ -370,10 +372,24 @@ $("ltabs").addEventListener("click", (e) => {
   document.querySelectorAll("#ltabs .chip").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
   $("list").innerHTML = listHtml(listKey);
 });
+// The work photo, from the gallery or the camera, is kept on its action box until the officer acts.
+function setProof(box, blob, label) {
+  box._proof = blob;
+  box.querySelector('[data-role="proofName"]').textContent = blob ? `✓ ${label}` : "";
+}
 $("queue").addEventListener("change", (e) => {
-  if (e.target.dataset.role !== "proof") return;
-  const name = e.target.closest(".proof-pick").querySelector('[data-role="proofName"]');
-  name.textContent = e.target.files[0] ? `✓ ${e.target.files[0].name}` : "";
+  const role = e.target.dataset.role;
+  if (role !== "proof" && role !== "proofcam") return;
+  const f = e.target.files[0];
+  setProof(e.target.closest(".actions"), f || null, f ? f.name || "कैमरा की फ़ोटो" : "");
+});
+$("queue").addEventListener("click", async (e) => {
+  const cam = e.target.closest('[data-role="cam"]');
+  if (!cam) return;
+  const box = cam.closest(".actions");
+  if (TOUCH) { box.querySelector('[data-role="proofcam"]').click(); return; }
+  const blob = await takePhoto();
+  if (blob) setProof(box, blob, "कैमरा की फ़ोटो");
 });
 setInterval(() => { if (token && !$("dash").hidden) refresh().catch(() => {}); }, REFRESH_MS);
 

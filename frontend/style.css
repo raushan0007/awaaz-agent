@@ -799,3 +799,15 @@ img { max-width: 100%; }
 #list .tbl td.num { white-space: nowrap; vertical-align: top; }
 @media (max-width: 760px) { #list .tbl td.num { white-space: normal; text-align: right; font-size: 13px; } }
 @media (max-width: 760px) { .card.hero { padding-bottom: 84px; } }
+
+/* camera */
+.pick-btn.alt { border-style: solid; border-color: var(--line); background: #091137; color: var(--text-2); }
+button.pick-btn { font: inherit; font-weight: 700; }
+.cam-back { position: fixed; inset: 0; z-index: 70; background: rgba(0, 0, 0, .88); display: grid; place-items: center; padding: 12px; animation: fade .2s ease-out; }
+.cam { width: min(720px, 100%); display: grid; gap: 12px; }
+.cam video { width: 100%; max-height: 70vh; border-radius: 18px; background: #000; object-fit: cover; }
+.cam-msg { color: #ffc27a; text-align: center; margin: 0; }
+.cam-bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.cam-shoot { width: 76px; height: 76px; border-radius: 50%; border: 5px solid #fff; background: var(--grad); font-size: 30px; cursor: pointer; box-shadow: 0 0 0 6px rgba(255, 255, 255, .15); }
+.cam-back.flash::after { content: ""; position: fixed; inset: 0; background: #fff; animation: flash .25s ease-out forwards; }
+@keyframes flash { to { opacity: 0; } }

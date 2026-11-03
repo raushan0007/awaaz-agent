@@ -173,6 +173,58 @@ export function plusCode(lat, lon) {
   return `${pairs.slice(0, 8)}+${pairs.slice(8)}${grid[0]}`;
 }
 
+// --- camera: the phone's own camera app on touch screens, a live in-page camera everywhere else ----------
+
+export const TOUCH = matchMedia("(pointer: coarse)").matches;
+
+/** Opens a live camera sheet; resolves to a JPEG Blob, or null if the citizen closes it. */
+export function takePhoto() {
+  return new Promise(async (resolve) => {
+    let stream = null;
+    let facing = "environment";
+    const back = document.createElement("div");
+    back.className = "cam-back";
+    back.innerHTML = `<div class="cam" role="dialog" aria-modal="true" aria-label="कैमरा">
+      <video autoplay playsinline muted></video>
+      <p class="cam-msg">कैमरा खुल रहा है…</p>
+      <div class="cam-bar">
+        <button type="button" class="ghost" data-cam="close">✕ बंद करें</button>
+        <button type="button" class="cam-shoot" data-cam="shoot" aria-label="फ़ोटो खींचें">📸</button>
+        <button type="button" class="ghost" data-cam="flip">🔄 कैमरा बदलें</button>
+      </div></div>`;
+    document.body.append(back);
+    const video = back.querySelector("video");
+    const msg = back.querySelector(".cam-msg");
+    const stop = () => stream?.getTracks().forEach((t) => t.stop());
+    const finish = (blob) => { stop(); back.remove(); resolve(blob); };
+    async function open() {
+      stop();
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: facing, width: { ideal: 1600 } }, audio: false });
+        video.srcObject = stream;
+        msg.hidden = true;
+      } catch {
+        msg.hidden = false;
+        msg.textContent = "कैमरा नहीं खुला — अनुमति दें, या गैलरी से फ़ोटो चुनें।";
+      }
+    }
+    back.addEventListener("click", (e) => {
+      const act = e.target.closest("[data-cam]")?.dataset.cam;
+      if (act === "close" || e.target === back) finish(null);
+      if (act === "flip") { facing = facing === "environment" ? "user" : "environment"; open(); }
+      if (act === "shoot" && video.videoWidth) {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        back.classList.add("flash");
+        canvas.toBlob((blob) => setTimeout(() => finish(blob), 180), "image/jpeg", 0.9);
+      }
+    });
+    open();
+  });
+}
+
 export const mapLink = (loc) => `https://www.google.com/maps?q=${loc.lat},${loc.lon}`;
 
 /** The best GPS fix within a few seconds: stops early once it is within 20 m. */

@@ -277,7 +277,16 @@ class Store:
             f" ORDER BY {URGENCY_ORDER}, supporters DESC, id LIMIT ?",
             (*args, limit),
         ).fetchall()
-        return [self._row(r) for r in rows]
+        items = [self._row(r) for r in rows]
+        # A complaint with no pin of its own takes the first pin among the reports joined to it.
+        for c in items:
+            if c["location"] is None:
+                pin = self._db.execute(
+                    "SELECT lat, lon, loc_accuracy FROM complaints WHERE duplicate_of = ? AND lat IS NOT NULL"
+                    " ORDER BY id LIMIT 1", (c["id"],)).fetchone()
+                if pin:
+                    c["location"] = {"lat": pin["lat"], "lon": pin["lon"], "accuracy": pin["loc_accuracy"], "from_supporter": True}
+        return items
 
     def stats(self, department: str, days: int = 30) -> dict[str, Any]:
         where, args = self._scope(department)

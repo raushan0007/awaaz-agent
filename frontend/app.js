@@ -2,7 +2,7 @@ import { Recorder } from "./recorder.js";
 import {
   $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
   mountChrome, revealOnScroll,
-  donutSvg, hoursText, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
 } from "./shared.js";
 
 mountChrome("citizen");
@@ -144,7 +144,10 @@ async function keepSample(blob, transcript) {
 async function pickPhoto(e) {
   const file = e.target.files[0];
   e.target.value = "";
-  if (!file) return;
+  if (file) await usePhoto(file);
+}
+
+async function usePhoto(file) {
   try {
     photoBlob = await shrinkPhoto(file);
   } catch {
@@ -628,6 +631,13 @@ function showTicket(c) {
 }
 $("send").addEventListener("click", send);
 $("photo").addEventListener("change", pickPhoto);
+$("camera").addEventListener("change", pickPhoto);
+// Phones open their own camera app; computers get a live camera in the page.
+$("camBtn").addEventListener("click", async () => {
+  if (TOUCH) { $("camera").click(); return; }
+  const blob = await takePhoto();
+  if (blob) await usePhoto(blob);
+});
 $("photoRemove").addEventListener("click", removePhoto);
 drawMeter();
 updateSteps();

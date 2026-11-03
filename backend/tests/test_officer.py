@@ -277,3 +277,13 @@ def test_public_dashboard_shows_emergencies_backers_trend_and_before_after(clien
     assert len(s["trend"]) == 14 and s["trend"][-1] == {"day": s["trend"][-1]["day"], "filed": 4, "fixed": 1}
     solved = s["solved"][0]
     assert solved["id"] == fixed and solved["has_photo"] and solved["proof_update"] == uid and solved["fix_days"] == 0.0
+
+
+def test_a_complaint_without_a_pin_shows_its_supporters_pin(client, store):
+    parent = add(store, area="Ward 8, Forbesganj")
+    store.add(text="wahi kooda", area="Ward 8, Forbesganj", has_photo=False, status="merged", category="roads",
+              urgency="medium", duplicate_of=parent, decision={"title_hi": TITLE}, trace=[],
+              location={"lat": 26.311235, "lon": 87.260094, "accuracy": 11})
+    queue = client.get("/api/officer/queue", headers=headers(client, "roads.officer", "road-pass")).json()
+    loc = next(c for c in queue if c["id"] == parent)["location"]
+    assert loc == {"lat": 26.311235, "lon": 87.260094, "accuracy": 11, "from_supporter": True}

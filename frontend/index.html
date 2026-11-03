@@ -200,7 +200,9 @@
       <div class="step-block">
         <h3><span class="num">3</span>फ़ोटो <small class="hint">(ज़रूरी नहीं, पर मदद करती है)</small></h3>
         <div class="photo-pick">
-          <label class="pick-btn" for="photo">📷 फ़ोटो लें या चुनें</label>
+          <button class="pick-btn" type="button" id="camBtn">📷 कैमरा से फ़ोटो लें</button>
+          <input id="camera" type="file" accept="image/*" capture="environment" hidden>
+          <label class="pick-btn alt" for="photo">🖼️ गैलरी से चुनें</label>
           <input id="photo" type="file" accept="image/*" hidden>
           <div id="photoPreview" class="photo-preview" hidden>
             <img id="photoThumb" alt="चुनी गई फ़ोटो">
