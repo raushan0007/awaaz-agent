@@ -925,3 +925,6 @@ main > *:nth-child(n+6) { animation-delay: .3s; }
 .chart-tip li b { margin-left: auto; padding-left: 12px; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: reduce) { .trend-chart .tbar { animation: none; } }
 @media print { .chart-tip, .trend .hint { display: none; } }
+.photo-note { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; font-size: 14px;
+  background: rgba(255, 179, 71, .12); border: 1px solid rgba(255, 179, 71, .35); }
+.photo-note::before { content: "⚠️ "; }

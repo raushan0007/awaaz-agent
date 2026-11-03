@@ -179,7 +179,7 @@ export function toast(message, tone = "") {
   el.className = `toast ${tone}`;
   el.textContent = message;
   $("toasts").append(el);
-  setTimeout(() => el.remove(), 4200);
+  setTimeout(() => el.remove(), Math.max(4200, message.length * 70));  // long messages stay long enough to read
 }
 
 // --- motion ------------------------------------------------------------------------------------------

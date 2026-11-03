@@ -100,6 +100,13 @@ A failed check or a Baseten outage falls back to a fixed Hindi template, so the 
 - Mobile, Aadhaar, email and PAN numbers are replaced with a visible tag (`[मोबाइल नंबर छिपाया गया]`) before
   the model, the officers or the database see them (Devanagari digits included); the citizen is told.
 - Photos lose EXIF/GPS on the phone and again on the server.
+- **Nothing unsafe is published** (`backend/app/moderation.py`). Before the agent runs, Muse Spark screens
+  the report text and the photo; officers' work photos are screened the same way.
+  - A photo showing nudity, sexual content, gore, a hateful symbol or self-harm is never stored. The
+    complaint is still filed without the photo, and the citizen is told why.
+  - Text that is itself sexual, abusive or threatening is refused, and nothing is stored. A report about
+    harassment or a fight still goes through.
+  - The check fails closed: if it cannot run, the photo is not kept. A rejected report keeps no photo at all.
 - Public pages show each problem's title, department, area, status, timings and photos (the citizen is told
   the photo is public; its location and phone details are stripped first), never the report text, the
   mobile number or the GPS pin.

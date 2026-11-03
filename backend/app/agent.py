@@ -34,7 +34,7 @@ Departments (pick the category key):
 {catalog_text()}
 
 Work in this order:
-1. Decide if this is a genuine civic complaint. Reject spam, abuse, advertisements, personal or family
+1. Decide if this is a genuine civic complaint. Reject spam, abuse, sexual or obscene content, advertisements, personal or family
    disputes, requests for medical or legal advice, and anything about political parties, leaders or
    elections. If rejected, call submit_decision right away with is_valid_complaint=false.
 2. Call search_similar_complaints with the area and category to find open complaints about the SAME

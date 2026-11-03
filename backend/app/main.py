@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
 
-from . import auth, status_writer
+from . import auth, moderation, status_writer
 from .agent import ComplaintAgent, Report
 from .audio import save_sample, voice_quality
 from .config import BudgetExceeded, settings
@@ -187,13 +187,27 @@ async def file_complaint(
         report.photo_mime = mime
         photo_info = {"file": None, "width": width, "height": height, "ext": "png" if mime == "image/png" else "jpg"}
 
+    # Photos are public, so nothing sexual, gory or hateful may be stored; the check fails closed for photos.
+    photo_note = None
+    try:
+        verdict = await moderation.screen(text, area, town, report.photo, report.photo_mime)
+    except BudgetExceeded:
+        raise
+    except Exception:
+        verdict = None  # the text still goes through the agent, which rejects abuse; the photo is dropped
+    if verdict is not None and not verdict["text_safe"]:
+        raise HTTPException(422, moderation.TEXT_BLOCKED_HI)  # nothing is stored
+    if report.photo is not None and (verdict is None or not verdict["photo_safe"]):
+        photo_note = moderation.PHOTO_UNCHECKED_HI if verdict is None else moderation.PHOTO_BLOCKED_HI
+        report.photo, photo_info = None, None
+
     store = get_store()
     result = await ComplaintAgent(store).run(report)
     d = result.decision or {}
     complaint_id = store.add(
         text=text,
         area=d.get("area") or area,
-        has_photo=report.photo is not None,
+        has_photo=report.photo is not None and result.status != "rejected",
         status=result.status,
         category=d.get("category") if result.status in ("open", "merged") else None,
         urgency=d.get("urgency") if result.status in ("open", "merged") else None,
@@ -205,13 +219,14 @@ async def file_complaint(
         location=location,
         contact=contact,
     )
-    if photo_info:
+    if photo_info and result.status != "rejected":  # a rejected report's photo is never kept
         photos_dir().mkdir(parents=True, exist_ok=True)
         photo_info["file"] = f"{complaint_id}.{photo_info.pop('ext')}"
         (photos_dir() / photo_info["file"]).write_bytes(report.photo)
         store.set_photo(complaint_id, photo_info)
     body = store.get(complaint_id)
     body["errors"] = result.errors
+    body["photo_note"] = photo_note
     if body["duplicate_of"]:
         body["supporters"] = store.supporters(body["duplicate_of"])
     # The citizen sees the whole picture of their place, not just their own ticket.
@@ -249,7 +264,7 @@ def get_complaint(complaint_id: int) -> dict:
 @app.get("/api/complaints/{complaint_id}/photo")
 def complaint_photo(complaint_id: int) -> FileResponse:
     body = get_store().get(complaint_id)
-    if body is None or not body["photo"]:
+    if body is None or not body["photo"] or body["status"] == "rejected":
         raise HTTPException(404, "No photo for this complaint.")
     return FileResponse(photos_dir() / body["photo"]["file"])
 
@@ -499,6 +514,15 @@ async def officer_update_photo(
         data, width, height = clean_photo(raw, mime)
     except PhotoError as exc:
         raise HTTPException(400, str(exc)) from exc
+    # The work photo is public too: screened like a citizen's, and never published unchecked.
+    try:
+        verdict = await moderation.screen("", photo=data, mime=mime)
+    except BudgetExceeded:
+        raise
+    except Exception as exc:
+        raise HTTPException(503, moderation.PROOF_UNCHECKED) from exc
+    if not verdict["photo_safe"]:
+        raise HTTPException(422, moderation.PROOF_BLOCKED)
     name = f"u{update_id}.{'png' if mime == 'image/png' else 'jpg'}"
     photos_dir().mkdir(parents=True, exist_ok=True)
     (photos_dir() / name).write_bytes(data)

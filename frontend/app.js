@@ -187,6 +187,7 @@ function showResult(c) {
         ${c.supporters > 1 ? `<span class="badge merged">👥 ${c.supporters} लोगों ने यही बताया</span>` : ""}
       </div>
       <p class="reply" translate="no">${esc(d.citizen_reply || (c.errors || []).join(" "))}</p>
+      ${c.photo_note ? `<p class="photo-note">${esc(c.photo_note)}</p>` : ""}
       ${(c.masked || []).length ? `<p class="privacy-note">🔒 आपकी निजी जानकारी (${c.masked.map((k) => HIDDEN[k] || k).join(", ")}) छिपा दी गई है — यह किसी अधिकारी या AI को नहीं दिखेगी।</p>` : ""}
       ${evidenceHtml(c)}
       ${d.rejection_reason ? `<p class="status">कारण: ${esc(d.rejection_reason)}</p>` : ""}
@@ -235,7 +236,7 @@ async function send() {
     loadPlaces().catch(() => {});  // a new town shows up straight away
     toast(c.status === "rejected" ? "शिकायत स्वीकार नहीं हुई" : `✓ शिकायत #${c.id} दर्ज हुई`, c.status === "rejected" ? "bad" : "ok");
   } catch (err) {
-    toast("गड़बड़ी: " + err.message, "bad");
+    toast(err.message.startsWith("यह शिकायत स्वीकार नहीं") ? err.message : "गड़बड़ी: " + err.message, "bad");
   } finally {
     btn.disabled = false;
     $("thinking").hidden = true;
