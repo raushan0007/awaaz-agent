@@ -40,6 +40,11 @@
         <div class="ticker-run"><div class="ticker-track" id="tickerTrack"></div></div>
       </div>
 
+      <section class="card place-card dept-bar no-print" id="deptBar" hidden>
+        <div class="dept-bar-head"><b>🏛️ विभाग चुनें</b><span class="hint">आँकड़े, ग्राफ़ और काम की सूची उसी विभाग की दिखेगी</span></div>
+        <div class="place-bar" id="deptChips" role="group" aria-label="विभाग"></div>
+      </section>
+
       <div class="toolbar no-print">
         <h2 style="font-size:24px">🧾 रिपोर्ट <small class="hint" id="period"></small></h2>
         <div class="presets" id="presets">
@@ -51,6 +56,12 @@
       </div>
 
       <section class="kpis" id="kpis"></section>
+
+      <section class="card" id="deptChartCard">
+        <h2>🏛️ विभागवार शिकायतें</h2>
+        <p class="hint">किसी विभाग पर क्लिक करें — पूरा डैशबोर्ड और काम की सूची उसी विभाग की दिखेगी</p>
+        <div id="deptChart"></div>
+      </section>
 
       <div class="dash-grid">
         <section class="card trend">
@@ -88,7 +99,7 @@
 
       <section id="queueSection">
         <div class="queue-head">
-          <h2 id="queueTitle">काम की सूची <small id="queueCount"></small></h2>
+          <h2 id="queueTitle">काम की सूची <span class="queue-dept" id="queueDept"></span> <small id="queueCount"></small></h2>
           <div class="queue-tools">
             <select id="sort" aria-label="क्रम">
               <option value="">⚡ सबसे ज़रूरी पहले</option>

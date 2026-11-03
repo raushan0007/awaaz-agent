@@ -76,6 +76,7 @@ JSON_COLUMNS = ("decision", "photo", "evidence", "masked")
 OPEN_STATES = ("open", "in_progress")
 URGENCY_ORDER = "CASE urgency WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END"
 ALL_DEPARTMENTS = "all"  # a district-level officer who sees every department and the review queue
+REVIEW = "review"  # not a department: reports the agent could not route, waiting for a person
 NUMBER_WORDS = {"no", "number", "नं", "नंबर"}
 
 
@@ -314,6 +315,15 @@ class Store:
 
     # --- officer views ----------------------------------------------------------------------------
 
+    @staticmethod
+    def _focus(where: str, args: list, focus: str) -> tuple[str, list]:
+        """Narrow a scope to one department ("review": what the agent could not route yet)."""
+        if not focus:
+            return where, args
+        if focus == REVIEW:
+            return f"({where}) AND category IS NULL", args
+        return f"({where}) AND category = ?", [*args, focus]
+
     def _scope(self, department: str) -> tuple[str, list]:
         if department == ALL_DEPARTMENTS:
             return "1=1", []
@@ -341,8 +351,8 @@ class Store:
                     c["location"] = {"lat": pin["lat"], "lon": pin["lon"], "accuracy": pin["loc_accuracy"], "from_supporter": True}
         return items
 
-    def stats(self, department: str, days: int = 30) -> dict[str, Any]:
-        where, args = self._scope(department)
+    def stats(self, department: str, days: int = 30, focus: str = "") -> dict[str, Any]:
+        where, args = self._focus(*self._scope(department), focus)
         since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat(timespec="seconds")
         recent = f"{where} AND created_at >= ? AND duplicate_of IS NULL"
         by_status = dict(self._db.execute(
@@ -384,9 +394,10 @@ class Store:
                 out.setdefault(cid, []).append((at, status))
         return out
 
-    def insights(self, department: str, days: int = 30) -> dict[str, Any]:
+    def insights(self, department: str, days: int = 30, focus: str = "") -> dict[str, Any]:
         """The officer's analysis for the last `days` days: KPIs, a daily trend, department and area
-        rankings, and the lists that need attention (most reported, unheard, slowest/fastest fixes)."""
+        rankings, and the lists that need attention (most reported, unheard, slowest/fastest fixes).
+        With `focus`, everything but the department comparison is about that one department."""
         where, args = self._scope(department)
         now = datetime.now(timezone.utc)
         since = (now - timedelta(days=days)).isoformat(timespec="seconds")
@@ -425,6 +436,7 @@ class Store:
                 "issues": len(group),
                 "reports": sum(g["supporters"] for g in group),
                 "open": sum(g["status"] in OPEN_STATES for g in group),
+                "in_progress": sum(g["status"] == "in_progress" for g in group),
                 "resolved": resolved,
                 "rate": round(100 * resolved / len(group)) if group else 0,
                 "avg_days": round(sum(fixed) / len(fixed), 1) if fixed else None,
@@ -432,13 +444,18 @@ class Store:
                 "unheard": sum(g["status"] == "open" and g["response_hours"] is None for g in group),
             }
 
+        # every department stays in the comparison, so the officer can switch from it to another
+        by_dept: dict[str, list] = {}
+        for p in problems:
+            by_dept.setdefault(p["category"] or REVIEW, []).append(p)
+        if focus:
+            rows = [r for r in rows if (r["category"] or REVIEW) == focus]
+            problems = by_dept.get(focus, [])
         trend = _day_trend([(now - timedelta(days=i)).astimezone(IST).date().isoformat() for i in range(days - 1, -1, -1)],
                            rows, problems, self._history([p["id"] for p in problems]))
 
-        by_dept: dict[str, list] = {}
         by_area: dict[str, list] = {}
         for p in problems:
-            by_dept.setdefault(p["category"] or "review", []).append(p)
             if p["area_key"]:
                 by_area.setdefault(p["area_key"], []).append(p)
         departments = sorted(({"category": k, **summary(v)} for k, v in by_dept.items()),
@@ -458,7 +475,8 @@ class Store:
             "recent": problems[::-1][:8],
             "times": sorted((p for p in problems if p["fix_days"] is not None), key=lambda p: p["fix_days"]),
         }
-        return {"days": days, "kpis": {**summary(problems), "reports": len(rows)}, "trend": trend, "departments": departments, "areas": areas, "lists": lists}
+        return {"days": days, "focus": focus, "kpis": {**summary(problems), "reports": len(rows)}, "trend": trend,
+                "departments": departments, "areas": areas, "lists": lists}
 
     def places(self) -> list[dict[str, Any]]:
         """Towns with at least one report, busiest first, shown as first spelled."""

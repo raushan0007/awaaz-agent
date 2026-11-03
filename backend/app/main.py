@@ -24,7 +24,7 @@ from .departments import CATEGORIES, DEPARTMENTS, MAX_TOWN_CHARS
 from .meta_client import transcribe_wav
 from .photos import PhotoError, clean_photo
 from .privacy import contact_hash, mask_pii, normalize_mobile
-from .store import Store
+from .store import ALL_DEPARTMENTS, REVIEW, Store
 from .vision import segment_image
 
 MAX_AUDIO_BYTES = 32 * 1024 * 1024
@@ -415,15 +415,28 @@ def officer_export(officer: dict = Depends(current_officer)) -> Response:
                     headers={"Content-Disposition": 'attachment; filename="awaaz-complaints.csv"'})
 
 
+def _focus(officer: dict, dept: str) -> str:
+    """A department to narrow the dashboard to: any one for a district officer, else their own scope."""
+    if not dept:
+        return ""
+    if dept != REVIEW and dept not in DEPARTMENTS:
+        raise HTTPException(400, "Unknown department.")
+    own = {officer["department"], REVIEW} if officer["department"] == "other" else {officer["department"]}
+    if officer["department"] != ALL_DEPARTMENTS and dept not in own:
+        raise HTTPException(403, "You can only see your own department.")
+    return dept
+
+
 @app.get("/api/officer/stats")
-def officer_stats(officer: dict = Depends(current_officer)) -> dict:
-    return get_store().stats(officer["department"])
+def officer_stats(dept: str = "", officer: dict = Depends(current_officer)) -> dict:
+    return get_store().stats(officer["department"], focus=_focus(officer, dept))
 
 
 @app.get("/api/officer/insights")
-def officer_insights(days: int = 30, officer: dict = Depends(current_officer)) -> dict:
-    """Trend, rankings and attention lists for the officer's own scope over 1 to 365 days."""
-    return get_store().insights(officer["department"], days=max(1, min(days, 365)))
+def officer_insights(days: int = 30, dept: str = "", officer: dict = Depends(current_officer)) -> dict:
+    """Trend, rankings and attention lists for the officer's own scope over 1 to 365 days, or for one
+    department in it."""
+    return get_store().insights(officer["department"], days=max(1, min(days, 365)), focus=_focus(officer, dept))
 
 
 @app.get("/api/public/stats")

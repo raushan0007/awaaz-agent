@@ -390,3 +390,28 @@ def test_dashboards_trend_ends_where_the_status_counts_are(client, store, open_m
     assert {k: end[k] for k in ("open", "in_progress", "resolved")} == {"open": 1, "in_progress": 0, "resolved": 1}
     ins = client.get("/api/officer/insights?days=7", headers=h).json()
     assert {k: ins["trend"][-1][k] for k in ("open", "in_progress", "resolved")} == {"open": 1, "in_progress": 0, "resolved": 1}
+
+
+def test_dashboard_narrows_to_one_department_but_keeps_the_comparison(client, store):
+    add(store, category="roads")
+    add(store, category="roads", status="in_progress")
+    add(store, category="water")
+    add(store, category=None, urgency=None, status="needs_review")
+    h = headers(client, "district.officer", "district-pass")
+
+    whole = client.get("/api/officer/insights", headers=h).json()
+    assert whole["kpis"]["issues"] == 4 and whole["focus"] == ""
+    roads = client.get("/api/officer/insights?dept=roads", headers=h).json()
+    assert roads["kpis"]["issues"] == 2 and roads["kpis"]["in_progress"] == 1
+    assert roads["trend"][-1]["open"] + roads["trend"][-1]["in_progress"] == 2  # the chart follows the filter
+    assert {d["category"] for d in roads["departments"]} == {"roads", "water", "review"}  # all still compared
+    review = client.get("/api/officer/insights?dept=review", headers=h).json()
+    assert review["kpis"]["issues"] == 1
+    assert client.get("/api/officer/stats?dept=water", headers=h).json()["by_status"] == {"open": 1}
+
+    assert client.get("/api/officer/insights?dept=nope", headers=h).status_code == 400
+    own = headers(client, "roads.officer", "road-pass")
+    assert client.get("/api/officer/insights?dept=water", headers=own).status_code == 403
+    assert client.get("/api/officer/insights?dept=roads", headers=own).status_code == 200
+    cell = headers(client, "grievance.officer", "grievance-pass")
+    assert client.get("/api/officer/stats?dept=review", headers=cell).status_code == 200

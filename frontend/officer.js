@@ -53,6 +53,11 @@ let days = 30;
 let insight = null;
 let listKey = "most_reported";
 let firstPaint = true;
+let dept = "";  // "" = the officer's whole scope; else one department ("review": not routed yet)
+let me = null;
+const deptName = (k) => (k === "review" ? "AI जाँच बाकी" : DEPARTMENTS[k] || k);
+const deptOf = (c) => c.category || "review";
+const dq = () => (dept ? `dept=${dept}` : "");
 
 async function api(path, options = {}) {
   const r = await fetch(path, {
@@ -153,11 +158,57 @@ function deptTableHtml(rows) {
   if (!rows.length) return `<p class="status">इस अवधि में कोई शिकायत नहीं।</p>`;
   return `<table class="tbl"><thead><tr><th>विभाग</th><th>समस्याएँ</th><th>रिपोर्ट</th><th>खुली</th><th>हल</th><th>हल दर</th>
     <th>औसत समाधान</th><th>पहला जवाब</th><th>अनसुनी</th></tr></thead><tbody>${rows.map((d) => `<tr>
-    <td>${ICON[d.category] || "🔎"} ${esc(DEPARTMENTS[d.category] || "AI जाँच बाकी")}${d.badge ? `<span class="rbadge ${d.badge}">${d.badge === "best" ? "सबसे अच्छा" : "पीछे"}</span>` : ""}</td>
+    <td><button type="button" class="link" data-dept="${esc(d.category)}">${ICON[d.category] || "🔎"} ${esc(deptName(d.category))}</button>${d.badge ? `<span class="rbadge ${d.badge}">${d.badge === "best" ? "सबसे अच्छा" : "पीछे"}</span>` : ""}</td>
     <td class="num">${d.issues}</td><td class="num">${d.reports}</td><td class="num">${d.open}</td><td class="num">${d.resolved}</td>
     <td>${rateHtml(d.rate)}</td><td class="num">${daysTxt(d.avg_days)}</td><td class="num">${hoursTxt(d.avg_response_hours)}</td>
     <td class="num">${d.unheard ? `<b style="color:var(--bad)">${d.unheard}</b>` : 0}</td></tr>`).join("")}</tbody></table>
     ${rows.some((d) => d.badge) ? "" : `<p class="hint">रैंकिंग के लिए हर विभाग में कम से कम 3 शिकायतें चाहिए।</p>`}`;
+}
+
+/** One bar per department, split into open / work on / fixed, longest first. A click narrows the dashboard. */
+function deptChartHtml(rows) {
+  if (!rows.length) return `<p class="status">इस अवधि में कोई शिकायत नहीं।</p>`;
+  const sorted = [...rows].sort((a, b) => b.issues - a.issues || b.open - a.open);
+  const max = Math.max(...sorted.map((d) => d.issues));
+  const seg = (k, v, total) => v ? `<i class="seg" style="width:${(v / total) * 100}%;background:${STATUS_COLOUR[k]}" title="${v}"></i>` : "";
+  return `<div class="dchart">${sorted.map((d) => {
+    const waiting = d.open - d.in_progress;
+    const other = d.issues - d.open - d.resolved;  // closed without a fix
+    return `<button type="button" class="drow ${dept === d.category ? "on" : ""} ${dept && dept !== d.category ? "dim" : ""}"
+        data-dept="${esc(d.category)}" aria-pressed="${dept === d.category}">
+      <span class="dname">${ICON[d.category] || "🔎"} ${esc(deptName(d.category))}</span>
+      <span class="dtrack"><span class="dfill" style="width:${(d.issues / max) * 100}%">
+        ${seg("open", waiting, d.issues)}${seg("in_progress", d.in_progress, d.issues)}${seg("resolved", d.resolved, d.issues)}${other ? `<i class="seg" style="width:${(other / d.issues) * 100}%;background:#7c8098"></i>` : ""}
+      </span></span>
+      <span class="dnum"><b>${d.issues}</b><small>${d.rate}% हल</small></span>
+      <span class="dsub">🕒 ${waiting} खुली · 🔧 ${d.in_progress} काम चल रहा · ✅ ${d.resolved} हल${d.unheard ? ` · <b style="color:var(--bad)">🔕 ${d.unheard} अनसुनी</b>` : ""}</span>
+    </button>`;
+  }).join("")}</div>
+  <div class="lg">${[["open", "खुली"], ["in_progress", "काम चल रहा"], ["resolved", "हल"]].map(([k, l]) =>
+    `<span><i style="background:${STATUS_COLOUR[k]}"></i>${l}</span>`).join("")}<span><i style="background:#7c8098"></i>बंद</span></div>`;
+}
+
+/** The sticky department picker, each with how much open work it has right now. */
+function renderDeptChips() {
+  if (!me || !["all", "other"].includes(me.department)) return;
+  const keys = me.department === "all" ? [...Object.keys(DEPARTMENTS), "review"] : ["other", "review"];
+  const open = (k) => queue.filter((c) => deptOf(c) === k).length;
+  const chip = (k, label, n) => `<button class="chip" type="button" data-dept="${k}" aria-pressed="${dept === k}"
+    title="${esc(k ? deptName(k) : "")}">${label} <b>${n}</b></button>`;
+  $("deptChips").innerHTML = chip("", me.department === "all" ? "🏛️ सभी विभाग" : "📋 सभी", queue.length)
+    + keys.filter((k) => k !== "review" || open(k) || dept === k)
+      .map((k) => chip(k, `${ICON[k] || "🔎"} ${esc(k === "review" ? "AI जाँच बाकी" : CATEGORY[k])}`, open(k))).join("");
+  $("deptBar").hidden = false;
+}
+
+async function setDept(k) {
+  if (k === dept) return;
+  dept = k;
+  renderDeptChips();
+  renderQueue();
+  const [stats, ins] = await Promise.all([api(`/api/officer/stats?${dq()}`), api(`/api/officer/insights?days=${days}&${dq()}`)]);
+  $("donut").innerHTML = donutHtml(stats.by_status);
+  renderInsights(ins);
 }
 
 function areaTableHtml(rows) {
@@ -179,8 +230,10 @@ function listHtml(key) {
 
 function renderInsights(ins) {
   insight = ins;
-  $("period").textContent = `(पिछले ${ins.days} दिन)`;
+  $("period").textContent = `(पिछले ${ins.days} दिन${dept ? ` · ${deptName(dept)}` : ""})`;
   renderKpis(ins.kpis);
+  $("deptChart").innerHTML = deptChartHtml(ins.departments);
+  $("deptChartCard").hidden = ins.departments.length < 2 && !dept;
   mountTrend($("trend"), ins.trend);
   $("deptTable").innerHTML = deptTableHtml(ins.departments);
   $("areaTable").innerHTML = areaTableHtml(ins.areas);
@@ -278,7 +331,7 @@ const SORTS = {
 let closedQueue = [];
 
 function matches(c) {
-  if (!TESTS[filter](c)) return false;
+  if (!TESTS[filter](c) || (dept && deptOf(c) !== dept)) return false;
   const q = $("search").value.trim().toLowerCase().replace(/^#/, "");
   if (!q) return true;
   const d = c.decision || {};
@@ -290,12 +343,13 @@ function renderQueue() {
   const shown = source.filter(matches);
   const sort = SORTS[$("sort").value];
   if (sort) shown.sort(sort);
+  const inDept = (list) => (dept ? list.filter((c) => deptOf(c) === dept) : list);
   document.querySelectorAll("#filters [data-count]").forEach((b) => {
     const k = b.dataset.count;
-    const n = k === "closed" ? closedQueue.length : queue.filter(TESTS[k]).length;
-    b.textContent = n;
+    b.textContent = k === "closed" ? inDept(closedQueue).length : inDept(queue).filter(TESTS[k]).length;
   });
-  $("queueCount").textContent = `(${shown.length})`;
+  $("queueDept").textContent = dept ? `· ${ICON[dept] || "🔎"} ${deptName(dept)}` : "";
+  $("queueCount").textContent = `(${shown.length} शिकायतें)`;
   $("queue").innerHTML = shown.length
     ? shown.map(itemHtml).join("")
     : `<p class="card empty">${filter === "overdue" ? "👏 कोई काम देर से नहीं रुका।" : source.length ? "इस फ़िल्टर में कुछ नहीं।" : "🎉 सब काम पूरा। कोई खुली शिकायत नहीं है।"}</p>`;
@@ -312,7 +366,7 @@ async function refresh() {
   if (document.activeElement && document.activeElement.closest(".actions")) return;
   if ([...document.querySelectorAll(".actions")].some((b) => b._proof)) return;
   const [stats, items, ins, pub, done] = await Promise.all([
-    api("/api/officer/stats"), api("/api/officer/queue"), api(`/api/officer/insights?days=${days}`),
+    api(`/api/officer/stats?${dq()}`), api("/api/officer/queue"), api(`/api/officer/insights?days=${days}&${dq()}`),
     fetch("/api/public/stats").then((r) => r.json()), api("/api/officer/queue?closed=1"),
   ]);
   closedQueue = done;
@@ -322,6 +376,7 @@ async function refresh() {
   firstPaint = false;
   renderPublic(pub);
   queue = items;
+  renderDeptChips();
   renderQueue();
   $("refreshed").textContent = "अपडेट: " + new Date().toLocaleTimeString(LOCALE, { hour: "numeric", minute: "2-digit" });
 }
@@ -375,6 +430,7 @@ async function uploadProof(updateId, file) {
 }
 
 async function start(officer) {
+  me = officer;
   $("loginCard").hidden = true;
   $("dash").hidden = false;
   const scope = SCOPES[officer.department] || officer.department;
@@ -402,6 +458,14 @@ $("kpis").addEventListener("click", (e) => {
   $("queueSection").scrollIntoView({ behavior: "smooth", block: "start" });
 });
 $("sort").addEventListener("change", renderQueue);
+// A department can be picked from the sticky bar, the department chart or the ranking table.
+document.addEventListener("click", (e) => {
+  const pick = e.target.closest("#deptChips [data-dept], #deptChart [data-dept], #deptTable [data-dept]");
+  if (!pick) return;
+  const k = pick.dataset.dept;
+  // a second click on the chosen bar or row shows every department again
+  setDept(pick.closest("#deptChips") ? k : dept === k ? "" : k).catch((err) => toast(err.message, "bad"));
+});
 $("export").addEventListener("click", async () => {
   const r = await fetch("/api/officer/export.csv", { headers: { Authorization: `Bearer ${token || ""}` } });
   if (!r.ok) { toast("फ़ाइल नहीं बन पाई", "bad"); return; }
@@ -419,7 +483,7 @@ $("presets").addEventListener("click", async (e) => {
   if (chip.id === "print") { window.print(); return; }
   days = Number(chip.dataset.days);
   document.querySelectorAll("#presets .chip[data-days]").forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
-  renderInsights(await api(`/api/officer/insights?days=${days}`));
+  renderInsights(await api(`/api/officer/insights?days=${days}&${dq()}`));
 });
 $("ltabs").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");

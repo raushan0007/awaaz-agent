@@ -928,3 +928,40 @@ main > *:nth-child(n+6) { animation-delay: .3s; }
 .photo-note { margin: 8px 0 0; padding: 8px 12px; border-radius: 10px; font-size: 14px;
   background: rgba(255, 179, 71, .12); border: 1px solid rgba(255, 179, 71, .35); }
 .photo-note::before { content: "⚠️ "; }
+
+/* officer: the sticky department picker and the department-wise chart */
+.dept-bar { top: 66px; }
+.dept-bar .chip { white-space: nowrap; flex: none; }
+.dept-bar-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.dept-bar-head b { font-size: 16px; }
+.dept-bar-head .hint { margin: 0; font-size: 13px; }
+.dchart { display: grid; gap: 8px; margin-top: 6px; }
+.drow { display: grid; grid-template-columns: minmax(150px, 230px) 1fr 76px; grid-template-areas: "name track num" "name sub num";
+  align-items: center; column-gap: 14px; row-gap: 2px; width: 100%; text-align: left; padding: 10px 12px; border-radius: 14px;
+  border: 1.5px solid transparent; background: rgba(255, 255, 255, .03); color: var(--text); font: inherit; cursor: pointer;
+  transition: background .2s, border-color .2s, opacity .2s, transform .2s; }
+.drow:hover { background: rgba(255, 255, 255, .07); transform: translateX(2px); }
+.drow.on { border-color: #ff9a2e; background: rgba(255, 154, 46, .10); }
+.drow.dim { opacity: .5; }
+.drow:focus-visible { outline: 2px solid #ff9a2e; outline-offset: 2px; }
+.dname { grid-area: name; font-weight: 600; line-height: 1.25; }
+.dtrack { grid-area: track; height: 14px; border-radius: 999px; background: rgba(255, 255, 255, .06); overflow: hidden; }
+.dfill { display: flex; height: 100%; border-radius: 999px; overflow: hidden; transform-origin: left; animation: grow-right .8s cubic-bezier(.2, .8, .2, 1) both; }
+.dfill .seg { display: block; height: 100%; }
+.dfill .seg + .seg { box-shadow: inset 2px 0 0 rgba(10, 21, 70, .6); }
+.dsub { grid-area: sub; font-size: 13px; color: var(--muted); }
+.dnum { grid-area: num; display: grid; justify-items: end; line-height: 1.1; }
+.dnum b { font-size: 22px; font-variant-numeric: tabular-nums; }
+.dnum small { color: var(--muted); font-size: 12px; }
+.dchart + .lg { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 12px; font-size: 14px; color: var(--text-2); }
+.dchart + .lg i { display: inline-block; width: 12px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: middle; }
+.queue-dept { font-size: .7em; color: #ffb347; font-weight: 600; }
+#deptTable .link { font: inherit; color: inherit; text-align: left; padding: 0; }
+#deptTable .link:hover { color: #ffb347; text-decoration: underline; }
+@keyframes grow-right { from { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .dfill { animation: none; } .drow:hover { transform: none; } }
+@media (max-width: 640px) {
+  .drow { grid-template-columns: 1fr 60px; grid-template-areas: "name num" "track num" "sub sub"; row-gap: 6px; }
+  .dept-bar-head .hint { display: none; }
+}
+

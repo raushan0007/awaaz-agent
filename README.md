@@ -18,7 +18,7 @@ checks the photo, merges it with reports of the same problem, and keeps the citi
 | Gets the department, urgency and a tracking number in seconds | Sees why: the agent's tool trace, the photo with SAM's mask, a ready Hindi letter |
 | Phone and Aadhaar numbers are hidden before anyone sees the report | Hotspots show where the same problems keep coming back |
 | Reads updates in simple Hindi, written from the officer's own note | Writes a two-word note and can add a photo of the work; the citizen gets a proper Hindi update |
-| Sees the whole picture of their place: every problem reported there and where each stands | |
+| Sees the whole picture of their place: every problem reported there and where each stands | A district officer picks a department (sticky bar, chart or ranking): every number, chart and the work list follow it |
 
 ## How it works
 
