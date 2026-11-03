@@ -134,7 +134,7 @@ main > * { min-width: 0; } /* the marquee tracks are max-content wide; never let
 .chakra-bg .wheel { transform-origin: 50% 50%; animation: spin 24s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .hero h1 { font-size: clamp(32px, 7vw, 48px); margin: 12px 0 10px; }
-.hero h1 .hl { background: linear-gradient(90deg, #ffae4d, #ffd28a 45%, #7be07a); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.hero h1 .hl, .hero h1 .hl [data-word] { background: linear-gradient(90deg, #ffae4d, #ffd28a 45%, #7be07a); -webkit-background-clip: text; background-clip: text; color: transparent; }
 .hero p { margin: 0; color: rgba(255, 255, 255, .84); max-width: 560px; }
 .hero .eyebrow { color: #ffc27a; }
 .waves { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; z-index: 0; pointer-events: none; }
@@ -887,3 +887,10 @@ main > *:nth-child(n+6) { animation-delay: .3s; }
 .lang button { border: 0; background: transparent; color: var(--text-2); font: inherit; font-weight: 700; font-size: 14px; padding: 5px 11px; border-radius: 999px; cursor: pointer; }
 .lang button[aria-pressed="true"] { background: var(--grad); color: #fff; }
 @media (max-width: 380px) { .lang button { padding: 4px 8px; font-size: 13px; } }
+
+/* when anime.js runs the entrances, the CSS fallbacks step aside so the two never fight */
+.js-anim .pop-in { animation: none; }
+.js-anim .reveal { opacity: 1; transform: none; transition: none; }
+/* vanilla-tilt glare stays inside rounded cards */
+.dept-card, a.feed-card, .ba, .step, .kpi, a.em-card, .open-box > div { transform-style: preserve-3d; }
+.js-tilt-glare { border-radius: inherit; }

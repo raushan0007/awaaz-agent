@@ -2,7 +2,7 @@ import { Recorder } from "./recorder.js";
 import {
   $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
   mountChrome, revealOnScroll,
-  animateLists, celebrate, donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  animateLists, celebrate, springIn, donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
   LOCALE, tt,
 } from "./shared.js";
 
@@ -621,6 +621,8 @@ function showTicket(c) {
     </div></div>`;
   document.body.append(back);
   if (c.status !== "rejected") celebrate();
+  springIn(back.querySelector(".ticket-big"));
+  springIn(back.querySelector(".big-tick"), 0.2);
   const close = () => back.remove();
   back.addEventListener("click", async (e) => {
     const act = e.target.closest("[data-act]")?.dataset.act;

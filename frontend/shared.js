@@ -1,6 +1,9 @@
 // Pieces the citizen, tracking and officer pages all use.
 
+import { enhance } from "./enhance.js";
 import { EN } from "./i18n-en.js";
+
+export { springIn } from "./enhance.js";
 
 // --- language: Hindi as written, or English through the dictionary in i18n-en.js ----------------------
 // The pages are written in Hindi. In English mode every text node and placeholder is translated as it
@@ -168,6 +171,7 @@ export function mountChrome(page) {
     if (b && b.dataset.lang !== LANG) setLang(b.dataset.lang);
   });
   startTranslating();
+  enhance();
 }
 
 export function toast(message, tone = "") {

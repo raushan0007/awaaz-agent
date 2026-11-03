@@ -185,12 +185,15 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 
 ## Open-source libraries
 
-Loaded from jsDelivr on demand; the pages work the same without them.
+Loaded from jsDelivr on demand; the pages work the same without them, and the motion is skipped
+when the visitor's device asks for reduced motion.
 
 | Library | Licence | Used for |
 |---|---|---|
 | [AutoAnimate](https://github.com/formkit/auto-animate) 0.8.2 | MIT | lists rearrange smoothly when filtered or sorted |
 | [canvas-confetti](https://github.com/catdad/canvas-confetti) 1.9.3 | ISC | a short burst when a complaint is filed or fixed |
+| [anime.js](https://github.com/juliangarnier/anime) 4.5.0 | MIT | the headline rising in word by word, cards and stats rising in on scroll, the springy ticket number |
+| [vanilla-tilt.js](https://github.com/micku7zu/vanilla-tilt.js) 1.8.1 | MIT | cards tilting towards the mouse on desktops |
 
 ## Known limits
 
