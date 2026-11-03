@@ -1015,3 +1015,15 @@ main > *:nth-child(n+6) { animation-delay: .3s; }
 .new-tag { display: inline-block; font-size: 13px; padding: 1px 8px; border-radius: 999px; background: #46dc5f; color: #062a10; vertical-align: middle; }
 @media (prefers-reduced-motion: reduce) { .bell.ringing { animation: none; } }
 
+/* officer: a view loading for the first time, a complaint jumped to, older work outside the window */
+.view-loading #kpis, .view-loading #deptChart, .view-loading #trend, .view-loading #donut { opacity: .45; transition: opacity .2s; }
+.view-loading #presets .chip[aria-pressed="true"]::after { content: ""; display: inline-block; width: 10px; height: 10px; margin-left: 6px;
+  border: 2px solid rgba(255, 255, 255, .5); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; vertical-align: -1px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.item.flash { animation: flash-card 1.6s ease-out 1; }
+@keyframes flash-card { 0%, 30% { box-shadow: 0 0 0 3px #ffb347, 0 0 30px rgba(255, 179, 71, .5); } 100% { box-shadow: var(--shadow); } }
+.older-note { margin: 10px 4px; }
+.toast.clickable { cursor: pointer; pointer-events: auto; }
+.toast.clickable:hover { filter: brightness(1.15); }
+#queueSection, #queue .item { scroll-margin-top: 170px; }  /* clear of the sticky header and department bar */
+

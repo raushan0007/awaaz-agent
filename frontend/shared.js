@@ -174,10 +174,11 @@ export function mountChrome(page) {
   enhance();
 }
 
-export function toast(message, tone = "") {
+export function toast(message, tone = "", onClick = null) {
   const el = document.createElement("div");
-  el.className = `toast ${tone}`;
+  el.className = `toast ${tone}${onClick ? " clickable" : ""}`;
   el.textContent = message;
+  if (onClick) { el.setAttribute("role", "button"); el.tabIndex = 0; el.addEventListener("click", () => { el.remove(); onClick(); }); }
   $("toasts").append(el);
   setTimeout(() => el.remove(), Math.max(4200, message.length * 70));  // long messages stay long enough to read
 }

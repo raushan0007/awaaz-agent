@@ -381,7 +381,7 @@ class StatusBody(BaseModel):
 
 def current_officer(authorization: str = Header("")) -> dict:
     token = authorization.removeprefix("Bearer ").strip()
-    officer = get_store().session_officer(token) if token else None
+    officer = auth.officer_for(get_store(), token) if token else None
     if officer is None:
         raise HTTPException(401, "Please log in again.")
     return officer

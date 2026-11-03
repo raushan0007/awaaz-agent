@@ -194,23 +194,82 @@ function deptChartHtml(rows) {
 function renderDeptChips() {
   if (!me || !["all", "other"].includes(me.department)) return;
   const keys = me.department === "all" ? [...Object.keys(DEPARTMENTS), "review"] : ["other", "review"];
-  const open = (k) => queue.filter((c) => deptOf(c) === k).length;
+  const open = (k) => queue.filter((c) => deptOf(c) === k && inWindow(c)).length;
   const chip = (k, label, n) => `<button class="chip" type="button" data-dept="${k}" aria-pressed="${dept === k}"
     title="${esc(k ? deptName(k) : "")}">${label} <b>${n}</b></button>`;
-  $("deptChips").innerHTML = chip("", me.department === "all" ? "🏛️ सभी विभाग" : "📋 सभी", queue.length)
+  const html = chip("", me.department === "all" ? "🏛️ सभी विभाग" : "📋 सभी", queue.filter(inWindow).length)
     + keys.filter((k) => k !== "review" || open(k) || dept === k)
       .map((k) => chip(k, `${ICON[k] || "🔎"} ${esc(k === "review" ? "AI जाँच बाकी" : CATEGORY[k])}`, open(k))).join("");
+  if ($("deptChips")._html !== html) { $("deptChips").innerHTML = html; $("deptChips")._html = html; }
   $("deptBar").hidden = false;
 }
 
-async function setDept(k) {
-  if (k === dept) return;
-  dept = k;
-  renderDeptChips();
+// The numbers for one view (a time window and a department), kept for a minute: switching back and forth
+// is instant, and the views an officer is likely to open next are fetched ahead.
+const views = new Map();
+const viewKey = (v = { days, hours, dept }) => `${v.days}|${v.hours}|${v.dept}`;
+const viewQuery = (v) => `days=${v.days}&hours=${v.hours}${v.dept ? `&dept=${v.dept}` : ""}`;
+
+async function fetchView(v = { days, hours, dept }) {
+  const [stats, ins] = await Promise.all([api(`/api/officer/stats?${viewQuery(v)}`), api(`/api/officer/insights?${viewQuery(v)}`)]);
+  const entry = { stats, ins, at: Date.now() };
+  views.set(viewKey(v), entry);
+  return entry;
+}
+
+let paintedView = "";
+function paintView(entry, key) {
+  const donut = donutHtml(entry.stats.by_status);
+  if ($("donut").innerHTML !== donut) $("donut").innerHTML = donut;
+  // Re-draw the analysis only when it changed, so the animations do not replay on every refresh.
+  if (key !== paintedView || JSON.stringify(entry.ins) !== JSON.stringify(insight)) renderInsights(entry.ins);
+  paintedView = key;
+}
+
+/** Show the current view: from the cache at once if it is there, then fresh from the server. */
+async function showView() {
+  const key = viewKey();
+  const cached = views.get(key);
+  document.body.classList.toggle("view-loading", !cached);
+  if (cached) paintView(cached, key);
   renderQueue();
-  const [stats, ins] = await Promise.all([api(`/api/officer/stats?${win()}&${dq()}`), api(`/api/officer/insights?${win()}&${dq()}`)]);
-  $("donut").innerHTML = donutHtml(stats.by_status);
-  renderInsights(ins);
+  try {
+    const entry = cached && Date.now() - cached.at < 15000 ? cached : await fetchView();
+    if (key === viewKey()) paintView(entry, key);  // the officer may have clicked on meanwhile
+  } finally {
+    if (key === viewKey()) document.body.classList.remove("view-loading");
+  }
+}
+
+function prefetchViews() {
+  const ahead = [{ days, hours: 1, dept }, { days, hours: 24, dept }, { days: 7, hours: 0, dept }, { days: 30, hours: 0, dept }];
+  ahead.filter((v) => !views.has(viewKey(v))).forEach((v, i) => setTimeout(() => fetchView(v).catch(() => {}), 400 * i));
+}
+
+/** Bring the work list into view, and optionally one complaint in it, briefly highlighted. */
+function goToQueue(id) {
+  const card = id && document.querySelector(`#queue .item[data-id="${id}"]`);
+  (card || $("queueSection")).scrollIntoView({ behavior: "smooth", block: card ? "center" : "start" });
+  if (card) { card.classList.remove("flash"); void card.offsetWidth; card.classList.add("flash"); }
+}
+
+/** Open one complaint from a notification: clear whatever filter would hide it, then scroll to it. */
+function openComplaint(id) {
+  const c = queue.find((x) => x.id === id || (x.merged_ids || []).includes(id));
+  if (c && dept && deptOf(c) !== dept) { dept = ""; renderDeptChips(); showView().catch(() => {}); }
+  if (c && !inWindow(c)) { hours = 24; markPreset(); showView().catch(() => {}); }
+  $("search").value = "";
+  setFilter("all");
+  requestAnimationFrame(() => goToQueue(c ? c.id : id));
+}
+
+async function setDept(k) {
+  if (k !== dept) {
+    dept = k;
+    renderDeptChips();
+    await showView();
+    prefetchViews();
+  }
 }
 
 function areaTableHtml(rows) {
@@ -251,7 +310,8 @@ function renderPublic(s) {
   if (s.just_fixed.length) {
     const items = s.just_fixed.map((f) =>
       `<span>✅ #${f.id} ${esc(tt(f))} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
-    $("tickerTrack").innerHTML = items + items;
+    // left alone when nothing new was fixed, so the running strip does not jump back to the start
+    if ($("tickerTrack")._items !== items) { $("tickerTrack").innerHTML = items + items; $("tickerTrack")._items = items; }
     $("ticker").hidden = false;
   }
 }
@@ -338,8 +398,18 @@ const SORTS = {
 };
 let closedQueue = [];
 
+/** The chosen time window: complaints filed inside it (1 hour, 24 hours, or N days). */
+const windowStart = () => Date.now() - (hours ? hours * 36e5 : days * 864e5);
+const inWindow = (c) => new Date(c.created_at).getTime() >= windowStart();
+const windowName = () => (hours === 1 ? "पिछले 1 घंटे में आईं" : hours ? "आज (24 घंटे) में आईं" : `पिछले ${days} दिन में आईं`);
+
+function markPreset() {
+  document.querySelectorAll("#presets .chip[data-days], #presets .chip[data-hours]").forEach((c) =>
+    c.setAttribute("aria-pressed", String(hours ? Number(c.dataset.hours) === hours : !c.dataset.hours && Number(c.dataset.days) === days)));
+}
+
 function matches(c) {
-  if (!TESTS[filter](c) || (dept && deptOf(c) !== dept)) return false;
+  if (!TESTS[filter](c) || (dept && deptOf(c) !== dept) || !inWindow(c)) return false;
   const q = $("search").value.trim().toLowerCase().replace(/^#/, "");
   if (!q) return true;
   const d = c.decision || {};
@@ -353,16 +423,21 @@ function renderQueue() {
   const shown = source.filter(matches);
   const sort = SORTS[$("sort").value];
   if (sort) shown.sort(sort);
-  const inDept = (list) => (dept ? list.filter((c) => deptOf(c) === dept) : list);
+  const inDept = (list) => list.filter((c) => (!dept || deptOf(c) === dept) && inWindow(c));
   document.querySelectorAll("#filters [data-count]").forEach((b) => {
     const k = b.dataset.count;
     b.textContent = k === "closed" ? inDept(closedQueue).length : inDept(queue).filter(TESTS[k]).length;
   });
-  $("queueDept").textContent = dept ? `· ${ICON[dept] || "🔎"} ${deptName(dept)}` : "";
+  $("queueDept").textContent = `${dept ? `· ${ICON[dept] || "🔎"} ${deptName(dept)} ` : ""}· ${windowName()}`;
   $("queueCount").textContent = `(${shown.length} शिकायतें)`;
-  $("queue").innerHTML = shown.length
+  // open work filed before the window is not lost: say how much there is and how to see it
+  const older = filter === "closed" ? 0 : queue.filter((c) => (!dept || deptOf(c) === dept) && !inWindow(c) && TESTS[filter](c)).length;
+  const html = (shown.length
     ? shown.map(itemHtml).join("")
-    : `<p class="card empty">${filter === "overdue" ? "👏 कोई काम देर से नहीं रुका।" : source.length ? "इस फ़िल्टर में कुछ नहीं।" : "🎉 सब काम पूरा। कोई खुली शिकायत नहीं है।"}</p>`;
+    : `<p class="card empty">${filter === "overdue" ? "👏 कोई काम देर से नहीं रुका।" : source.length ? "इस समय और फ़िल्टर में कोई शिकायत नहीं।" : "🎉 सब काम पूरा। कोई खुली शिकायत नहीं है।"}</p>`)
+    + (older ? `<p class="hint older-note">➕ इससे पहले की ${older} खुली शिकायतें भी हैं — <button type="button" class="link" data-widen="1">90 दिन की सब देखें</button></p>` : "");
+  // the same list again (a refresh with nothing new) is left alone: no flicker, no lost scroll
+  if ($("queue")._html !== html) { $("queue").innerHTML = html; $("queue")._html = html; }
 }
 
 function setFilter(name) {
@@ -375,14 +450,13 @@ async function refresh() {
   // Never re-render under an officer who is typing a note.
   if (document.activeElement && document.activeElement.closest(".actions")) return;
   if ([...document.querySelectorAll(".actions")].some((b) => b._proof)) return;
-  const [stats, items, ins, pub, done] = await Promise.all([
-    api(`/api/officer/stats?${win()}&${dq()}`), api("/api/officer/queue"), api(`/api/officer/insights?${win()}&${dq()}`),
-    fetch("/api/public/stats").then((r) => r.json()), api("/api/officer/queue?closed=1"),
+  const key = viewKey();
+  const [view, items, pub, done] = await Promise.all([
+    fetchView(), api("/api/officer/queue"), fetch("/api/public/stats").then((r) => r.json()), api("/api/officer/queue?closed=1"),
   ]);
   closedQueue = done;
-  $("donut").innerHTML = donutHtml(stats.by_status);
-  // Re-draw the analysis only when it changed, so the animations do not replay every 30 seconds.
-  if (firstPaint || JSON.stringify(ins) !== JSON.stringify(insight)) renderInsights(ins);
+  if (key === viewKey()) paintView(view, key);
+  if (firstPaint) prefetchViews();
   firstPaint = false;
   renderPublic(pub);
   queue = items;
@@ -472,7 +546,7 @@ async function pulse() {
     fresh.add(n.id);
     const where = `${ICON[n.category] || "🔎"} ${deptName(n.category || "review")}${n.area ? ` · ${n.area}` : ""}`;
     const what = n.duplicate_of ? `#${n.id} नई रिपोर्ट, शिकायत #${n.duplicate_of} से जुड़ी` : `नई शिकायत #${n.id}: ${tt(n)}`;
-    toast(`🔔 ${what} — ${where}`, n.urgency === "critical" ? "bad" : "ok");
+    toast(`🔔 ${what} — ${where} · देखें →`, n.urgency === "critical" ? "bad" : "ok", () => { setUnread(Math.max(0, unread - 1)); openComplaint(n.id); });
     try {
       if (document.hidden && "Notification" in window && Notification.permission === "granted") {
         new Notification(`Awaaz: ${what}`, { body: where, tag: `awaaz-${n.id}` });
@@ -521,7 +595,9 @@ document.addEventListener("click", (e) => {
   if (!pick) return;
   const k = pick.dataset.dept;
   // a second click on the chosen bar or row shows every department again
-  setDept(pick.closest("#deptChips") ? k : dept === k ? "" : k).catch((err) => toast(err.message, "bad"));
+  const next = pick.closest("#deptChips") ? k : dept === k ? "" : k;
+  setDept(next).catch((err) => toast(err.message, "bad"));
+  if (next) setTimeout(() => goToQueue(), 50);  // straight to that department's complaints
 });
 $("export").addEventListener("click", async () => {
   const r = await fetch("/api/officer/export.csv", { headers: { Authorization: `Bearer ${token || ""}` } });
@@ -540,11 +616,8 @@ $("presets").addEventListener("click", async (e) => {
   if (chip.id === "print") { window.print(); return; }
   hours = Number(chip.dataset.hours || 0);
   if (!hours) days = Number(chip.dataset.days);
-  document.querySelectorAll("#presets .chip[data-days], #presets .chip[data-hours]")
-    .forEach((c) => c.setAttribute("aria-pressed", String(c === chip)));
-  const [stats, ins] = await Promise.all([api(`/api/officer/stats?${win()}&${dq()}`), api(`/api/officer/insights?${win()}&${dq()}`)]);
-  $("donut").innerHTML = donutHtml(stats.by_status);
-  renderInsights(ins);
+  markPreset();
+  await showView().catch((err) => toast(err.message, "bad"));
 });
 $("ltabs").addEventListener("click", (e) => {
   const chip = e.target.closest(".chip");
@@ -574,16 +647,33 @@ $("queue").addEventListener("click", async (e) => {
 });
 setInterval(() => { if (token && !$("dash").hidden) refresh().catch(() => {}); }, REFRESH_MS);
 setInterval(() => { if (token && !$("dash").hidden) pulse().catch(() => {}); }, PULSE_MS);
+$("queue").addEventListener("click", (e) => {
+  if (!e.target.closest("[data-widen]")) return;
+  hours = 0; days = 90; markPreset(); showView().catch(() => {});
+});
 $("bell").addEventListener("click", () => {
   setUnread(0);
-  setFilter("all");
-  $("queueSection").scrollIntoView({ behavior: "smooth", block: "start" });
+  const newest = Math.max(0, ...fresh);
+  if (newest) openComplaint(newest); else { setFilter("all"); goToQueue(); }
   // the first click is also the moment to ask for desktop notifications, for when this tab is in the background
   try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch { /* ignore */ }
 });
 
+// Only a rejected login (401, handled in api) logs the officer out. A slow or sleeping server, or a network
+// blip, is retried instead, so the officer is never thrown out for something that is not their login.
+async function boot(tries = 0) {
+  try {
+    await start(await api("/api/officer/me"));
+  } catch (err) {
+    if (!token) return;  // the login itself was refused: api() has already shown the login form
+    console.error("dashboard did not load, retrying", err);
+    if (tries === 0) toast("सर्वर धीमा है — फिर से कोशिश कर रहे हैं…", "bad");
+    setTimeout(() => boot(tries + 1), Math.min(10000, 2000 * (tries + 1)));
+  }
+}
+
 if (token) {
-  api("/api/officer/me").then(start).catch(logout);
+  boot();
 } else {
   logout();
 }

@@ -438,3 +438,22 @@ def test_pulse_names_new_complaints_for_the_bell(client, store):
     p = client.get(f"/api/officer/pulse?after={first}", headers=h).json()
     assert p["latest"] == second and [n["id"] for n in p["new"]] == [second] and p["new"][0]["title_hi"] == TITLE
     assert client.get("/api/officer/pulse").status_code == 401
+
+
+def test_a_login_survives_a_restart_and_cannot_be_forged(tmp_path):
+    from backend.app.store import Store as S
+
+    first = S(tmp_path / "a.db")
+    auth.create_officer(first, "roads.officer", "Roads Officer", "roads", "road-pass")
+    token, _ = auth.login(first, "roads.officer", "road-pass")
+    first.close()
+    # a restart: a fresh database with the officer created again (new password hash), the same token still works
+    again = S(tmp_path / "b.db")
+    auth.create_officer(again, "roads.officer", "Roads Officer", "roads", "road-pass")
+    assert auth.officer_for(again, token)["department"] == "roads"
+    name, expires, sig = token.split(".")
+    forged_name = auth.make_token("district.officer").split(".")[0]
+    assert auth.officer_for(again, f"{forged_name}.{expires}.{sig}") is None  # a changed name breaks the signature
+    assert auth.officer_for(again, f"{name}.{int(expires) + 99999}.{sig}") is None  # so does a longer expiry
+    assert auth.officer_for(again, auth.make_token("roads.officer", hours=-1)) is None  # expired
+    assert auth.officer_for(again, "garbage") is None
