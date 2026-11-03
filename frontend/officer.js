@@ -2,6 +2,7 @@ import {
   $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mapLink, mountChrome, plusCode,
   animateLists, celebrate, shrinkPhoto, STATUS, takePhoto, TOUCH, WORK_STAGES,
   starsHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  LOCALE, tt,
 } from "./shared.js";
 
 mountChrome("officer");
@@ -159,7 +160,7 @@ function trendHtml(series) {
   const ticks = [0, Math.ceil(max / 2), max];
   const every = Math.ceil(series.length / 6);
   const labels = series.map((d, i) => (i % every === 0 || i === series.length - 1)
-    ? `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${new Date(d.day).toLocaleDateString("hi-IN", { day: "numeric", month: "short" })}</text>` : "").join("");
+    ? `<text x="${x(i).toFixed(1)}" y="${H - 6}" text-anchor="middle">${new Date(d.day).toLocaleDateString(LOCALE, { day: "numeric", month: "short" })}</text>` : "").join("");
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
     <defs><linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9a2e" stop-opacity=".35"/><stop offset="1" stop-color="#ff9a2e" stop-opacity="0"/></linearGradient>
     <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#46dc5f" stop-opacity=".3"/><stop offset="1" stop-color="#46dc5f" stop-opacity="0"/></linearGradient></defs>
@@ -194,7 +195,7 @@ function listHtml(key) {
     : key === "times" ? `<b style="color:var(--ok)">${p.fix_days} दिन में हल</b>`
     : key === "most_reported" ? `👥 ${p.supporters}` : esc(timeAgo(p.created_at));
   return `<table class="tbl"><tbody>${rows.slice(0, 8).map((p) => `<tr>
-    <td>#${p.id} ${ICON[p.category] || ""} ${esc(p.title_hi || CATEGORY[p.category] || "")}<br><small class="hint">📍 ${esc(p.area || "")}</small></td>
+    <td>#${p.id} ${ICON[p.category] || ""} ${esc(tt(p) || CATEGORY[p.category] || "")}<br><small class="hint">📍 ${esc(p.area || "")}</small></td>
     <td class="num">${extra(p)}</td></tr>`).join("")}</tbody></table>`;
 }
 
@@ -213,7 +214,7 @@ function renderPublic(s) {
   $("tFixed").textContent = s.today.fixed;
   if (s.just_fixed.length) {
     const items = s.just_fixed.map((f) =>
-      `<span>✅ #${f.id} ${esc(f.title_hi)} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
+      `<span>✅ #${f.id} ${esc(tt(f))} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
     $("tickerTrack").innerHTML = items + items;
     $("ticker").hidden = false;
   }
@@ -239,21 +240,21 @@ function actionsHtml(c) {
       <span class="hint" data-role="proofName">ज़रूरी नहीं — नागरिक को काम होता दिखेगा</span></div>` : ""}
     ${actions.length ? `<div class="action-buttons">${actions.map(([status, label]) =>
       `<button type="button" class="act ${status}" data-status="${status}">${label}</button>`).join("")}</div>` : ""}
-    <p class="status" data-role="msg"></p>
+    <p class="status" data-role="msg" translate="no"></p>
   </div>`;
 }
 
 function itemHtml(c) {
   const d = c.decision || {};
   const updates = (c.updates || []).map((u) =>
-    `<li><time>${esc(formatTime(u.created_at))}</time> <b>${esc(STATUS[u.status] || u.status)}</b> — ${esc(u.message_hi)}
+    `<li><time>${esc(formatTime(u.created_at))}</time> <b>${esc(STATUS[u.status] || u.status)}</b> — <span translate="no">${esc(u.message_hi)}</span>
       ${u.photo ? `<a href="/api/updates/${u.id}/photo" target="_blank" rel="noopener">📷 फ़ोटो</a>` : ""}</li>`).join("");
   const late = c.overdue
     ? `<p class="late">⏰ ${Math.floor(c.idle_days)} दिन से ${OVERDUE_TEXT[c.status] || "कोई कार्रवाई नहीं"} — जल्दी देखें</p>` : "";
   const reopened = (c.updates || []).some((u) => u.status === "reopened");
   return `<article class="card item ${esc(c.urgency || "")} ${c.overdue ? "is-late" : ""}" data-id="${c.id}">
     <div class="item-head">
-      <h3>#${c.id} ${esc(d.title_hi || c.text.slice(0, 80))}</h3>
+      <h3>#${c.id} ${esc(tt(d) || c.text.slice(0, 80))}</h3>
       <span class="status">${esc(age(c.created_at))}</span>
     </div>
     ${late}${reopened ? `<p class="late reopen">↩️ यह शिकायत पहले "हल" की गई थी, फिर से खोली गई है</p>` : ""}
@@ -268,10 +269,10 @@ function itemHtml(c) {
       <span class="badge">${starsHtml(c.info_level)}</span>${c.gave_mobile ? `<span class="badge">📱 मोबाइल दिया</span>` : ""}
     </div>
     ${d.urgency_reason ? `<p class="why">क्यों ${esc(URGENCY[c.urgency] || "")}: ${esc(d.urgency_reason)}</p>` : ""}
-    <p class="citizen-text">“${esc(c.text)}”</p>
+    <p class="citizen-text" translate="no">“${esc(c.text)}”</p>
     <details><summary>📷 फ़ोटो, 📄 पत्र और 🤖 AI की जाँच</summary>
       ${evidenceHtml(c)}
-      ${d.formal_letter_hi ? `<div class="letter">${esc(d.formal_letter_hi)}</div>` : ""}
+      ${d.formal_letter_hi ? `<div class="letter" translate="no">${esc(d.formal_letter_hi)}</div>` : ""}
       ${traceHtml(c.trace)}
     </details>
     ${updates ? `<ul class="history">${updates}</ul>` : ""}
@@ -344,7 +345,7 @@ async function refresh() {
   renderPublic(pub);
   queue = items;
   renderQueue();
-  $("refreshed").textContent = "अपडेट: " + new Date().toLocaleTimeString("hi-IN", { hour: "numeric", minute: "2-digit" });
+  $("refreshed").textContent = "अपडेट: " + new Date().toLocaleTimeString(LOCALE, { hour: "numeric", minute: "2-digit" });
 }
 
 async function act(button) {

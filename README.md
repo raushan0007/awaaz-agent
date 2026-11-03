@@ -161,7 +161,7 @@ and a `demo.officer` login is created with that password.
 python -m pytest -q backend/tests
 ```
 
-76 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
+82 tests cover the agent loop with a scripted model (verifier bounces, nudges, merges), PII masking,
 photo metadata stripping, officer scoping and status rules, the open-model fallback, and the demo bootstrap.
 `python scripts/smoke_test.py sample.wav photo.jpg` calls every live model once;
 `python scripts/agent_demo.py` runs the agent live on a new report, a duplicate and spam.
@@ -178,9 +178,19 @@ photo metadata stripping, officer scoping and status rules, the open-model fallb
 | Oct 31 | Docker / Render deployment, demo database, this README |
 | Nov 1 | Any town in India (typed or from the phone's location), town-scoped duplicate search, area overview, real photo reports from Forbesganj |
 | Nov 1 | Redesigned UI: ticket card with progress stepper, phone bottom nav, officer donut chart and filters; voice samples kept only on the author's machine; officers attach a photo of the work |
+| Nov 3 | हिं / EN switch for the whole interface; officer work stages (inspected → approved → work on → fixed), pending / running-late / unanswered / fixed filters, reopen with a reason, Excel export; citizen "not fixed yet" reopen by mobile; camera capture; motion across the app |
 | Nov 1 | Public dashboard per town: emergencies first, 14-day trend, category bars with how many people reported, most-reported, before/after photos of fixed problems; form in its own sheet; GPS radar with live accuracy |
 | Nov 1 | Ticket popup (copy, WhatsApp, track), "my complaints" by phone or mobile, information level, public department reply times, every step's timing and a public no-reply warning on tracking |
 | Nov 1 | Night-navy design with the turning Ashoka chakra, live numbers and AI replay on the home page; officer analysis (trend, rankings, attention lists, printable report) |
+
+## Open-source libraries
+
+Loaded from jsDelivr on demand; the pages work the same without them.
+
+| Library | Licence | Used for |
+|---|---|---|
+| [AutoAnimate](https://github.com/formkit/auto-animate) 0.8.2 | MIT | lists rearrange smoothly when filtered or sorted |
+| [canvas-confetti](https://github.com/catdad/canvas-confetti) 1.9.3 | ISC | a short burst when a complaint is filed or fixed |
 
 ## Known limits
 

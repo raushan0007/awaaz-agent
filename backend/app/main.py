@@ -273,6 +273,7 @@ def track_complaint(complaint_id: int) -> dict:
         "status": main_c["status"],
         "stage": main_c.get("stage"),
         "title_hi": decision.get("title_hi", ""),
+        "title_en": decision.get("title_en", ""),
         "department_hi": dept["name_hi"] if dept else "",
         "category": main_c["category"],
         "area": main_c["area"],

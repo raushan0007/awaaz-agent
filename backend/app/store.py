@@ -208,6 +208,7 @@ class Store:
                     "category": r["category"],
                     "urgency": r["urgency"],
                     "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", ""),
+                    "title_en": (json.loads(r["decision"]) if r["decision"] else {}).get("title_en", ""),
                     "supporters": self.supporters(r["id"]),
                 }
                 for r in problems[:limit]
@@ -372,6 +373,7 @@ class Store:
         for r in problems:
             r["supporters"] = supporters.get(r["id"], 1)
             r["title_hi"] = (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", "")
+            r["title_en"] = (json.loads(r["decision"]) if r["decision"] else {}).get("title_en", "")
             r["fix_days"] = round(span(r["created_at"], fixed_at[r["id"]]) / 86400, 1) if r["id"] in fixed_at else None
             r["response_hours"] = round(span(r["created_at"], first_update[r["id"]]) / 3600, 1) if r["id"] in first_update else None
             del r["decision"]
@@ -482,6 +484,7 @@ class Store:
                 "category": r["category"], "urgency": r["urgency"], "supporters": backers.get(r["id"], 0) + 1,
                 "info_level": info_level(bool(r["gave_mobile"]), bool(r["pinned"]), bool(r["has_photo"])),
                 "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", ""),
+                "title_en": (json.loads(r["decision"]) if r["decision"] else {}).get("title_en", ""),
                 "has_photo": bool(r["has_photo"]),
             }
             if r["id"] in fixed_at:
@@ -589,4 +592,5 @@ class Store:
             " WHERE contact_hash = ? ORDER BY id DESC LIMIT ?", (contact, limit)).fetchall()
         return [{"id": r["id"], "created_at": r["created_at"], "status": r["status"], "category": r["category"],
                  "merged_into": r["duplicate_of"],
-                 "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", "")} for r in rows]
+                 "title_hi": (json.loads(r["decision"]) if r["decision"] else {}).get("title_hi", ""),
+                 "title_en": (json.loads(r["decision"]) if r["decision"] else {}).get("title_en", "")} for r in rows]

@@ -1,6 +1,7 @@
 import {
   $, animateLists, celebrate, chakraHtml, esc, formatTime, hoursText, ICON, mountChrome, myTickets, starsHtml, STATUS,
   stepperHtml, URGENCY, WAVES,
+  LOCALE, tt,
 } from "./shared.js";
 
 mountChrome("track");
@@ -28,7 +29,7 @@ async function show(id) {
   const noReply = !t.updates.length && ["open", "in_progress"].includes(t.status) && waitedH > 48
     ? `<p class="no-reply">⚠️ ${hoursText(waitedH)} से विभाग की ओर से कोई जवाब नहीं — यह सबको दिखता है।</p>` : "";
   const updates = `<ul class="timeline">${t.updates.slice().reverse().map((u) =>
-        `<li><time>${esc(formatTime(u.created_at))}<span class="gap">दर्ज होने के ${esc(since(u.created_at))} बाद</span></time><span class="badge ${esc(u.status)}">${esc(STATUS[u.status] || u.status)}</span><p>${esc(u.message_hi)}</p>
+        `<li><time>${esc(formatTime(u.created_at))}<span class="gap">दर्ज होने के ${esc(since(u.created_at))} बाद</span></time><span class="badge ${esc(u.status)}">${esc(STATUS[u.status] || u.status)}</span><p translate="no">${esc(u.message_hi)}</p>
           ${u.photo ? `<figure class="proof"><img src="/api/updates/${u.id}/photo" alt="विभाग की भेजी काम की फ़ोटो" loading="lazy"><figcaption>📷 विभाग ने काम की फ़ोटो भेजी</figcaption></figure>` : ""}</li>`).join("")}${filed}</ul>`;
   const decision = `<div class="decision">
     <span>🤖 <b>AI का फ़ैसला:</b> ${ICON[t.category] || ""} ${esc(t.department_hi || "अधिकारी जाँच करेंगे")}${t.urgency ? ` · ${esc(URGENCY[t.urgency])}` : ""}</span>
@@ -41,7 +42,7 @@ async function show(id) {
   el.className = `card ticket ${t.status}`;
   el.innerHTML = `
     <div class="ticket-head">
-      <div><small>${esc(STATUS[t.status] || t.status)}</small><h2>${esc(t.title_hi || "शिकायत")}</h2></div>
+      <div><small>${esc(STATUS[t.status] || t.status)}</small><h2>${esc(tt(t) || "शिकायत")}</h2></div>
       <div class="ticket-no"><small>शिकायत संख्या</small><b>#${t.id}</b></div>
     </div>
     <div class="ticket-body">
@@ -106,7 +107,7 @@ if (initial && /^\d+$/.test(initial)) {
 // --- the citizen's own tickets: this phone's list, or every ticket filed with their mobile number -------
 
 function mineHtml(list) {
-  return list.length ? list.map((t) => `<a href="/track.html?id=${t.id}"><span><b>#${t.id}</b> ${esc(t.title || t.title_hi || "")}</span>
+  return list.length ? list.map((t) => `<a href="/track.html?id=${t.id}"><span><b>#${t.id}</b> ${esc(t.title || tt(t) || "")}</span>
     <small>${t.status ? esc(STATUS[t.status] || t.status) : esc(formatTime(t.at))}</small></a>`).join("")
     : `<p class="hint" style="margin:0">इस फ़ोन से अभी कोई शिकायत नहीं।</p>`;
 }

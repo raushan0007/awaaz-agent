@@ -3,6 +3,7 @@ import {
   $, areaHtml, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, ICON, locateHere, locateTown, mapLink,
   mountChrome, revealOnScroll,
   animateLists, celebrate, donutSvg, hoursText, takePhoto, TOUCH, LEVEL, saveTicket, shrinkPhoto, starsHtml, trendSvg, STATUS, stepperHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
+  LOCALE, tt,
 } from "./shared.js";
 
 mountChrome("citizen");
@@ -174,7 +175,7 @@ function showResult(c) {
   el.className = `card ticket ${c.status}`;
   el.innerHTML = `
     <div class="ticket-head">
-      <div><small>${esc(STATUS[c.status] || c.status)}</small><h2>${esc(d.title_hi || "आपकी शिकायत")}</h2></div>
+      <div><small>${esc(STATUS[c.status] || c.status)}</small><h2>${esc(tt(d) || "आपकी शिकायत")}</h2></div>
       <div class="ticket-no"><small>शिकायत संख्या</small><b>#${c.id}</b></div>
     </div>
     <div class="ticket-body">
@@ -185,11 +186,11 @@ function showResult(c) {
         ${c.area ? `<span class="badge">📍 ${esc(c.area)}</span>` : ""}
         ${c.supporters > 1 ? `<span class="badge merged">👥 ${c.supporters} लोगों ने यही बताया</span>` : ""}
       </div>
-      <p class="reply">${esc(d.citizen_reply || (c.errors || []).join(" "))}</p>
+      <p class="reply" translate="no">${esc(d.citizen_reply || (c.errors || []).join(" "))}</p>
       ${(c.masked || []).length ? `<p class="privacy-note">🔒 आपकी निजी जानकारी (${c.masked.map((k) => HIDDEN[k] || k).join(", ")}) छिपा दी गई है — यह किसी अधिकारी या AI को नहीं दिखेगी।</p>` : ""}
       ${evidenceHtml(c)}
       ${d.rejection_reason ? `<p class="status">कारण: ${esc(d.rejection_reason)}</p>` : ""}
-      ${d.formal_letter_hi ? `<details><summary>📄 विभाग को भेजा गया पत्र</summary><div class="letter">${esc(d.formal_letter_hi)}</div></details>` : ""}
+      ${d.formal_letter_hi ? `<details><summary>📄 विभाग को भेजा गया पत्र</summary><div class="letter" translate="no">${esc(d.formal_letter_hi)}</div></details>` : ""}
       ${traceHtml(c.trace)}
       ${areaHtml(c.area_summary)}
       ${c.status !== "rejected" ? `<a class="track-link" href="/track.html?id=${c.id}"><span>शिकायत #${c.id} का आगे का हाल देखें</span><span>→</span></a>` : ""}
@@ -288,14 +289,14 @@ function feedCard(r, i = 0) {
       ${r.urgency ? `<span class="badge ${esc(r.urgency)}">${esc(URGENCY[r.urgency])}</span>` : ""}
       <span class="badge ${esc(r.status)}">${esc(STATUS[r.status] || r.status)}</span></span>
       <small>${esc(timeAgo(r.created_at))}</small></div>
-    <h3>${esc(r.title_hi || "शिकायत #" + r.id)}</h3>
+    <h3>${esc(tt(r) || "शिकायत #" + r.id)}</h3>
     <small>📍 ${esc(r.area || "")} · #${r.id}${r.supporters > 1 ? ` · 👥 ${r.supporters} लोगों ने बताया` : ""} · ${starsHtml(r.info_level, false)}</small></div>
     ${r.has_photo ? `<img class="thumb" src="${photoOf(r)}" alt="" loading="lazy">` : ""}</a>`;
 }
 
 function emergencyHtml(list) {
   return list.map((r, i) => `<a class="em-card pop-in" ${stagger(i)} href="/track.html?id=${r.id}">${thumb(r)}
-    <span><b>${esc(r.title_hi || "शिकायत #" + r.id)}</b>
+    <span><b>${esc(tt(r) || "शिकायत #" + r.id)}</b>
     <small>📍 ${esc(r.area || "")} · ${esc(STATUS[r.status])} · ${esc(timeAgo(r.created_at))}${r.supporters > 1 ? ` · 👥 ${r.supporters} लोग` : ""}</small></span></a>`).join("");
 }
 
@@ -312,7 +313,7 @@ function catBarsHtml(byCat) {
 
 function mostHtml(list) {
   return list.map((r, i) => `<a class="pop-in" ${stagger(i)} href="/track.html?id=${r.id}">${thumb(r)}
-    <span><b>${esc(r.title_hi || "शिकायत #" + r.id)}</b><br><small class="hint">📍 ${esc(r.area || "")} · ${esc(STATUS[r.status])}</small></span>
+    <span><b>${esc(tt(r) || "शिकायत #" + r.id)}</b><br><small class="hint">📍 ${esc(r.area || "")} · ${esc(STATUS[r.status])}</small></span>
     <span class="count">${r.supporters}<small>लोग</small></span></a>`).join("");
 }
 
@@ -322,7 +323,7 @@ function solvedHtml(list) {
       <figure>${r.has_photo ? `<img src="${photoOf(r)}" alt="समस्या की फ़ोटो" loading="lazy">` : ICON[r.category] || "📋"}<figcaption>पहले</figcaption></figure>
       <figure class="after">${r.proof_update ? `<img src="/api/updates/${r.proof_update}/photo" alt="काम के बाद की फ़ोटो" loading="lazy">` : "✅"}<figcaption>बाद में</figcaption></figure>
     </div>
-    <div class="ba-body"><b>${esc(r.title_hi || "")}</b><small>✅ ${r.fix_days != null ? `${r.fix_days} दिन में हल` : "हल हुई"} · 📍 ${esc(r.area || "")}</small></div></a>`).join("");
+    <div class="ba-body"><b>${esc(tt(r) || "")}</b><small>✅ ${r.fix_days != null ? `${r.fix_days} दिन में हल` : "हल हुई"} · 📍 ${esc(r.area || "")}</small></div></a>`).join("");
 }
 
 let demoItems = [];
@@ -339,7 +340,7 @@ async function playDemo() {
   $("demoOut").innerHTML = "";
   $("demoState").innerHTML = `✨ AI समझ रहा है <span class="dots"><i></i><i></i><i></i></span>`;
   $("demoDots").innerHTML = demoItems.map((_, i) => `<i class="${i === demoIndex % demoItems.length ? "on" : ""}"></i>`).join("");
-  const text = r.title_hi || "";
+  const text = tt(r) || "";
   for (let i = 1; i <= text.length; i++) {
     $("demoSaid").textContent = text.slice(0, i);
     await new Promise((res) => setTimeout(res, 28));
@@ -390,7 +391,7 @@ async function loadPublic() {
   $("ticker").hidden = !s.just_fixed.length;
   if (s.just_fixed.length) {
     const items = s.just_fixed.map((f) =>
-      `<span>✅ #${f.id} ${esc(f.title_hi)} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
+      `<span>✅ #${f.id} ${esc(tt(f))} · ${esc(f.area || "")} · ${esc(timeAgo(f.fixed_at))}</span>`).join("");
     $("tickerTrack").innerHTML = items + items;
   }
   $("solvedSec").hidden = !s.solved.length;
@@ -406,7 +407,7 @@ async function loadPublic() {
   requestAnimationFrame(() => setTimeout(() =>
     document.querySelectorAll("#deptGrid .bar i").forEach((b) => { b.style.width = b.dataset.w + "%"; }), 300));
   if (!shownOnce) {
-    demoItems = s.recent.filter((r) => r.title_hi && r.category).slice(0, 5);
+    demoItems = s.recent.filter((r) => tt(r) && r.category).slice(0, 5);
     if (!demoTimer) playDemo();
   }
   shownOnce = true;
@@ -592,19 +593,19 @@ function updateSteps() {
 function showTicket(c) {
   const d = c.decision || {};
   const id = c.duplicate_of || c.id;
-  saveTicket({ id: c.id, title: d.title_hi || "", at: c.created_at });
+  saveTicket({ id: c.id, title: tt(d) || "", at: c.created_at });
   const url = `${location.origin}/track.html?id=${c.id}`;
   const head = c.status === "rejected"
     ? ["⚠️", "शिकायत स्वीकार नहीं हुई"]
     : c.status === "merged" ? ["🤝", `पहले से दर्ज शिकायत #${id} से जोड़ी गई`] : ["✅", "आपकी शिकायत दर्ज हो गई"];
-  const share = `मेरी शिकायत Awaaz पर दर्ज हुई: #${c.id} — ${d.title_hi || ""}. हाल देखें: ${url}`;
+  const share = `मेरी शिकायत Awaaz पर दर्ज हुई: #${c.id} — ${tt(d) || ""}. हाल देखें: ${url}`;
   const back = document.createElement("div");
   back.className = "sheet-back";
   back.innerHTML = `<div class="sheet ${esc(c.status)}" role="dialog" aria-modal="true" aria-label="शिकायत संख्या">
     <div class="sheet-top"><div class="big-tick">${head[0]}</div><small>${esc(head[1])}</small>
       <div>शिकायत संख्या</div><div class="ticket-big">#${c.id}</div><small>यह नंबर संभालकर रखें</small></div>
     <div class="sheet-body">
-      ${d.title_hi ? `<b>${esc(d.title_hi)}</b>` : ""}
+      ${tt(d) ? `<b>${esc(tt(d))}</b>` : ""}
       <div class="badges" style="margin:0">
         ${d.department ? `<span class="badge dept">🏛️ ${esc(d.department.name_hi)}</span>` : ""}
         ${c.urgency ? `<span class="badge ${esc(c.urgency)}">${esc(URGENCY[c.urgency])}</span>` : ""}

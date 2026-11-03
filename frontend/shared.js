@@ -1,5 +1,68 @@
 // Pieces the citizen, tracking and officer pages all use.
 
+import { EN } from "./i18n-en.js";
+
+// --- language: Hindi as written, or English through the dictionary in i18n-en.js ----------------------
+// The pages are written in Hindi. In English mode every text node and placeholder is translated as it
+// appears (including what scripts render later); anything inside translate="no" is data and left alone.
+
+export const LANG = (() => { try { return localStorage.getItem("awaaz-lang") === "en" ? "en" : "hi"; } catch { return "hi"; } })();
+export const LOCALE = LANG === "en" ? "en-IN" : "hi-IN";
+const DEVA = /[\u0900-\u097F]/;
+// longer phrases may also be found inside a sentence; short words only as a whole text
+const PHRASES = Object.keys(EN).filter((k) => [...k].length >= 6).sort((a, b) => b.length - a.length);
+// short words are replaced only as whole words ("2 लोग" -> "2 people", never inside a longer word)
+const WORDS = Object.keys(EN).filter((k) => [...k].length < 6).sort((a, b) => b.length - a.length)
+  .map((k) => [new RegExp("(?<![\\u0900-\\u097F])" + k.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "(?![\\u0900-\\u097F])", "g"), EN[k]]);
+
+export function tr(text) {
+  if (LANG !== "en" || !text || !DEVA.test(text)) return text;
+  const core = text.trim();
+  const lead = text.slice(0, text.indexOf(core)), trail = text.slice(text.indexOf(core) + core.length);
+  if (EN[core] !== undefined) return lead + EN[core] + trail;
+  let out = core;
+  for (const k of PHRASES) if (out.includes(k)) out = out.split(k).join(EN[k]);
+  if (DEVA.test(out)) for (const [re, en] of WORDS) out = out.replace(re, en);
+  return lead + out.replace(/  +/g, " ") + trail;
+}
+
+/** A complaint's title in the chosen language (the agent writes both). */
+export const tt = (o) => (LANG === "en" ? (o?.title_en || o?.title_hi || "") : (o?.title_hi || o?.title_en || ""));
+
+const ATTRS = ["placeholder", "title", "aria-label", "alt"];
+function translateTree(root) {
+  if (root.nodeType === Node.TEXT_NODE) {
+    if (!root.parentElement?.closest('[translate="no"], script, style')) {
+      const t = tr(root.nodeValue);
+      if (t !== root.nodeValue) root.nodeValue = t;
+    }
+    return;
+  }
+  if (root.nodeType !== Node.ELEMENT_NODE || root.closest('[translate="no"], script, style')) return;
+  for (const el of [root, ...root.querySelectorAll("*")]) {
+    if (el.closest('[translate="no"]')) continue;
+    for (const a of ATTRS) if (el.hasAttribute(a)) { const v = tr(el.getAttribute(a)); if (v !== el.getAttribute(a)) el.setAttribute(a, v); }
+  }
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) translateTree(n);
+}
+
+function startTranslating() {
+  if (LANG !== "en") return;
+  document.documentElement.lang = "en";
+  document.title = tr(document.title);
+  translateTree(document.body);
+  new MutationObserver((muts) => muts.forEach((m) => {
+    if (m.type === "characterData") translateTree(m.target);
+    m.addedNodes.forEach(translateTree);
+  })).observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+
+function setLang(lang) {
+  try { localStorage.setItem("awaaz-lang", lang); } catch { /* private mode */ }
+  location.reload();
+}
+
 export const $ = (id) => document.getElementById(id);
 
 export const esc = (s) =>
@@ -42,7 +105,7 @@ export const DEPARTMENTS = {
 };
 
 export function formatTime(iso) {
-  return new Date(iso).toLocaleString("hi-IN", { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
+  return new Date(iso).toLocaleString(LOCALE, { day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }
 
 const MAX_PHOTO_SIDE = 1600;
@@ -85,6 +148,9 @@ export function mountChrome(page) {
       <a class="brand" href="/">${LOGO}<span><b>आवाज़</b><small>नागरिक शिकायत पोर्टल · भारत</small></span></a>
       <div id="headerExtra"></div>
       <nav class="pills" aria-label="पन्ने">${links(page, false)}</nav>
+      <div class="lang" role="group" aria-label="भाषा / Language" translate="no">
+        <button type="button" data-lang="hi" aria-pressed="${LANG === "hi"}">हिं</button><button type="button" data-lang="en" aria-pressed="${LANG === "en"}">EN</button>
+      </div>
     </div></header>`);
   document.body.insertAdjacentHTML("beforeend", `
     <footer>
@@ -97,6 +163,11 @@ export function mountChrome(page) {
     </footer>
     <nav class="bottom-nav" aria-label="पन्ने">${links(page, true)}</nav>
     <div class="toasts" id="toasts" role="status" aria-live="polite"></div>`);
+  document.querySelector(".lang").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-lang]");
+    if (b && b.dataset.lang !== LANG) setLang(b.dataset.lang);
+  });
+  startTranslating();
 }
 
 export function toast(message, tone = "") {
@@ -352,7 +423,7 @@ export function trendSvg(series) {
   const area = (k) => `${line(k)} L${x(series.length - 1).toFixed(1)} ${H - B} L${L} ${H - B}Z`;
   const every = Math.ceil(series.length / 5);
   const labels = series.map((d, i) => (i % every === 0 || i === series.length - 1)
-    ? `<text x="${x(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${new Date(d.day).toLocaleDateString("hi-IN", { day: "numeric", month: "short" })}</text>` : "").join("");
+    ? `<text x="${x(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${new Date(d.day).toLocaleDateString(LOCALE, { day: "numeric", month: "short" })}</text>` : "").join("");
   const dots = series.map((d, i) => d.filed ? `<circle cx="${x(i).toFixed(1)}" cy="${y(d.filed).toFixed(1)}" r="3" fill="#ff9a2e"/>` : "").join("");
   return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
     <defs><linearGradient id="hr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ff9a2e" stop-opacity=".35"/><stop offset="1" stop-color="#ff9a2e" stop-opacity="0"/></linearGradient>
@@ -462,7 +533,7 @@ export function areaHtml(s) {
   const cats = Object.entries(s.by_category)
     .map(([k, v]) => `<span class="badge">${esc(CATEGORY[k] || k)}: ${v}</span>`).join("");
   const items = s.items.map((i) => `<li>
-      <a href="/track.html?id=${i.id}">#${i.id}</a> <span>${esc(i.title_hi || CATEGORY[i.category] || "")}</span>
+      <a href="/track.html?id=${i.id}">#${i.id}</a> <span>${esc(tt(i) || CATEGORY[i.category] || "")}</span>
       <span class="badge ${esc(i.status)}">${esc(STATUS[i.status] || i.status)}</span>
       ${i.supporters > 1 ? `<small>👥 ${i.supporters} लोगों ने बताया</small>` : ""}
       <small>${formatTime(i.created_at)}</small></li>`).join("");
