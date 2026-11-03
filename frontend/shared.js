@@ -417,15 +417,19 @@ export function donutSvg(byStatus) {
     <ul class="legend">${parts.map(([label, colour, v]) => `<li><i style="background:${colour}"></i>${label} <b>${v}</b></li>`).join("")}</ul>`;
 }
 
-const TREND = { filed: "#ff9a2e", fixed: "#46dc5f", open: "#ffcf5c", in_progress: "#6aa8ff", resolved: "#2fae4f" };
+/** One colour per status, shared by the donuts and the daily chart. */
+export const STATUS_COLOUR = Object.fromEntries(SLICE_COLOURS.map(([k, , colour]) => [k, colour]));
+// new reports get a colour no status uses; "fixed that day" is the fixed colour
+const TREND = { ...STATUS_COLOUR, filed: "#ff6fa5", fixed: STATUS_COLOUR.resolved };
+const num = (v) => (Number.isFinite(v) ? v : 0);
 
 /** One day's numbers as the tooltip lists them. */
-function trendTip(d) {
+function trendTip(d, states) {
   const date = new Date(d.day + "T12:00:00").toLocaleDateString(LOCALE, { weekday: "short", day: "numeric", month: "long" });
   const row = (colour, label, v) => `<li><i style="background:${colour}"></i><span>${tr(label)}</span><b>${v}</b></li>`;
   return `<b class="tip-day">${esc(date)}</b>
-    <small>${tr("उस दिन")}</small><ul>${row(TREND.filed, "नई रिपोर्ट", d.filed)}${row(TREND.fixed, "हल हुईं", d.fixed)}</ul>
-    <small>${tr("दिन ख़त्म होने पर")}</small><ul>${row(TREND.open, "खुली", d.open)}${row(TREND.in_progress, "काम चालू", d.in_progress)}${row(TREND.resolved, "हल", d.resolved)}</ul>`;
+    <small>${tr("उस दिन")}</small><ul>${row(TREND.filed, "नई रिपोर्ट", num(d.filed))}${row(TREND.fixed, "हल हुईं", num(d.fixed))}</ul>${states
+    ? `<small>${tr("दिन ख़त्म होने पर")}</small><ul>${row(TREND.open, "खुली", d.open)}${row(TREND.in_progress, "काम चल रहा", d.in_progress)}${row(TREND.resolved, "हल", d.resolved)}</ul>` : ""}`;
 }
 
 /** Two panels over the same days. Top: reports that came in and problems fixed that day, side by side so
@@ -434,15 +438,17 @@ function trendTip(d) {
 export function mountTrend(el, series) {
   if (!series?.length) { el.innerHTML = `<p class="status">${tr("अभी कोई आँकड़ा नहीं।")}</p>`; return; }
   const n = series.length;
+  // an older server sends only filed/fixed: then the end-of-day panel is left out rather than drawn from nothing
+  const states = series.every((d) => ["open", "in_progress", "resolved"].every((k) => Number.isFinite(d[k])));
   const W = Math.round(Math.min(900, Math.max(300, el.clientWidth || 640)));
   const narrow = W < 520;
-  const L = 28, R = 6, gap = 38, ph = narrow ? 92 : 104, T = 30, H = T + ph + gap + ph + 22;
+  const L = 28, R = 6, gap = 38, ph = narrow ? 92 : 104, T = 30, H = T + ph + (states ? gap + ph : 0) + 22;
   const slot = (W - L - R) / n;
   const cx = (i) => L + slot * (i + 0.5);
   const scale = (top) => { const step = Math.max(1, Math.ceil(top / 3)); return { step, max: step * Math.max(1, Math.ceil(top / step)) }; };
-  const a = scale(Math.max(1, ...series.map((d) => Math.max(d.filed, d.fixed))));
-  const b = scale(Math.max(1, ...series.map((d) => d.open + d.in_progress + d.resolved)));
-  const top1 = T, base1 = T + ph, top2 = base1 + gap, base2 = top2 + ph;
+  const a = scale(Math.max(1, ...series.map((d) => Math.max(num(d.filed), num(d.fixed)))));
+  const b = scale(states ? Math.max(1, ...series.map((d) => d.open + d.in_progress + d.resolved)) : 1);
+  const top1 = T, base1 = T + ph, top2 = base1 + gap, base2 = states ? top2 + ph : base1;
   const y1 = (v) => base1 - (v * ph) / a.max, y2 = (v) => base2 - (v * ph) / b.max;
   const bw = Math.max(2, Math.min(16, slot * 0.36)), sw = Math.max(3, Math.min(26, slot * 0.62));
   const grid = (s, y) => Array.from({ length: s.max / s.step + 1 }, (_, k) => k * s.step).map((t) =>
@@ -451,9 +457,9 @@ export function mountTrend(el, series) {
   const rect = (fill, x, y, w, h, i, round = "") =>
     `<rect class="tbar" fill="${fill}" x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${w.toFixed(1)}" height="${Math.max(0, h).toFixed(1)}"${round} ${delay(i)}/>`;
   const bars = series.map((d, i) =>
-    (d.filed ? rect(TREND.filed, cx(i) - bw - 1, y1(d.filed), bw, base1 - y1(d.filed), i, ' rx="2"') : "") +
-    (d.fixed ? rect(TREND.fixed, cx(i) + 1, y1(d.fixed), bw, base1 - y1(d.fixed), i, ' rx="2"') : "")).join("");
-  const stacks = series.map((d, i) => {
+    (num(d.filed) ? rect(TREND.filed, cx(i) - bw - 1, y1(d.filed), bw, base1 - y1(d.filed), i, ' rx="2"') : "") +
+    (num(d.fixed) ? rect(TREND.fixed, cx(i) + 1, y1(d.fixed), bw, base1 - y1(d.fixed), i, ' rx="2"') : "")).join("");
+  const stacks = !states ? "" : series.map((d, i) => {
     let acc = 0;
     return ["resolved", "in_progress", "open"].map((k) => {
       if (!d[k]) return "";
@@ -466,19 +472,19 @@ export function mountTrend(el, series) {
   const fmt = (d) => new Date(d.day + "T12:00:00").toLocaleDateString(LOCALE, { day: "numeric", month: "short" });
   const labels = series.map((d, i) => (i === n - 1 || (i % every === 0 && n - 1 - i >= every * 0.6))
     ? `<text x="${cx(i).toFixed(1)}" y="${H - 5}" text-anchor="middle">${fmt(d)}</text>` : "").join("");
-  const total = series.reduce((s, d) => [s[0] + d.filed, s[1] + d.fixed], [0, 0]);
+  const total = series.reduce((s, d) => [s[0] + num(d.filed), s[1] + num(d.fixed)], [0, 0]);
   const key = (k, label, extra = "") => `<span><i style="background:${TREND[k]}"></i>${label}${extra}</span>`;
   el.classList.add("trend-chart");
   el.innerHTML = `<div class="lg">${key("filed", "नई रिपोर्ट", ` <b>${total[0]}</b>`)}${key("fixed", "हल हुईं", ` <b>${total[1]}</b>`)}</div>
     <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="रोज़ आई और हल हुई शिकायतें">
-    <g class="grid">${grid(a, y1)}${grid(b, y2)}</g>
+    <g class="grid">${grid(a, y1)}${states ? grid(b, y2) : ""}</g>
     <text class="panel" x="${L}" y="${top1 - 14}">हर दिन आईं और हल हुईं</text>
-    <text class="panel" x="${L}" y="${top2 - 14}">दिन ख़त्म होने पर कुल स्थिति</text>
+    ${states ? `<text class="panel" x="${L}" y="${top2 - 14}">दिन ख़त्म होने पर कुल स्थिति</text>` : ""}
     <line class="guide" x1="0" x2="0" y1="${top1}" y2="${base2}" hidden/>
     ${bars}${stacks}${labels}
     ${series.map((d, i) => `<rect class="hit" data-i="${i}" x="${(L + slot * i).toFixed(1)}" y="${top1 - 4}" width="${slot.toFixed(1)}" height="${base2 - top1 + 8}"/>`).join("")}
     </svg>
-    <div class="lg lg2">${key("open", "खुली")}${key("in_progress", "काम चालू")}${key("resolved", "हल")}</div>
+    ${states ? `<div class="lg lg2">${key("open", "खुली")}${key("in_progress", "काम चल रहा")}${key("resolved", "हल")}</div>` : ""}
     <div class="chart-tip${narrow ? " below" : ""}" role="status" hidden></div>`;
   const svg = el.querySelector("svg"), tip = el.querySelector(".chart-tip"), guide = el.querySelector(".guide");
   let shown = -1;
@@ -489,7 +495,7 @@ export function mountTrend(el, series) {
     guide.setAttribute("x1", cx(i)); guide.setAttribute("x2", cx(i));
     svg.querySelectorAll(".hit.on").forEach((c) => c.classList.remove("on"));
     svg.querySelector(`.hit[data-i="${i}"]`).classList.add("on");
-    tip.innerHTML = trendTip(series[i]);
+    tip.innerHTML = trendTip(series[i], states);
     tip.hidden = false;
     if (narrow) return;  // on phones the numbers sit under the chart instead of over it
     const box = el.getBoundingClientRect(), s = svg.getBoundingClientRect();

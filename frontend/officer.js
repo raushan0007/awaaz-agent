@@ -2,7 +2,7 @@ import {
   $, CATEGORY, chakraHtml, countUp, DEPARTMENTS, esc, evidenceHtml, formatTime, ICON, mapLink, mountChrome, plusCode,
   animateLists, celebrate, shrinkPhoto, STATUS, takePhoto, TOUCH, WORK_STAGES,
   starsHtml, timeAgo, toast, traceHtml, URGENCY, WAVES,
-  LOCALE, mountTrend, tt,
+  LOCALE, mountTrend, STATUS_COLOUR, tt,
 } from "./shared.js";
 
 mountChrome("officer");
@@ -24,9 +24,9 @@ const ACTIONS = {
 const OVERDUE_TEXT = { open: "काम शुरू नहीं हुआ", in_progress: "कोई नया अपडेट नहीं", needs_review: "जाँच नहीं हुई" };
 // Donut slices: label and colour per status (kept in step with the tile tones in style.css).
 const SLICES = [
-  ["open", "खुली", "#7aa7ff"],
-  ["in_progress", "काम चल रहा", "#ffb347"],
-  ["resolved", "हल हुईं", "#46dc5f"],
+  ["open", "खुली", STATUS_COLOUR.open],
+  ["in_progress", "काम चल रहा", STATUS_COLOUR.in_progress],
+  ["resolved", "हल हुईं", STATUS_COLOUR.resolved],
   ["needs_review", "जाँच बाकी", "#a9b6ff"],
   ["rejected", "बंद", "#7c8098"],
 ];
